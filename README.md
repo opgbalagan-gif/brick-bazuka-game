@@ -2,6 +2,10 @@
 
 Vertical 9:16 arcade prototype for Godot 4. The bazooka is both the weapon and the movement system: aim, shoot, recoil, fly, smash bricks and collect cash.
 
+## Play online
+
+[Launch BRICK BAZUKA in the browser](https://opgbalagan-gif.github.io/brick-bazuka-game/)
+
 ## Run
 
 Open `project.godot` in Godot 4.4+ and press **F6/F5**, or launch from a terminal:
