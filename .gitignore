@@ -1,0 +1,8 @@
+.godot/
+.testdata/
+*.tmp
+*.log
+capture*.png
+capture*.avi
+capture*.wav
+capture*.import
