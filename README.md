@@ -22,7 +22,7 @@ godot --path .
 - Aim below the hero to climb; aim down-right to recoil up-left and vice versa.
 - Space/Enter: fire straight down.
 - Pause button or Escape: pause.
-- Tap upgrade cards on the home screen to purchase levels.
+- Tap SHOP on the title screen, then tap an upgrade card to purchase levels. MISSIONS shows persistent progress.
 
 ## Gameplay systems
 
@@ -39,7 +39,7 @@ godot --path .
 
 ## Asset layout
 
-Project art lives in `assets/ui`, `assets/characters`, `assets/weapons`, `assets/blocks`, `assets/pickups`, `assets/effects` and `assets/backgrounds`. The supplied hero is stored as a transparent main-character sprite; supporting art is original SVG and procedural pixel-style rendering.
+Project art lives in `assets/ui`, `assets/characters`, `assets/weapons`, `assets/blocks`, `assets/pickups`, `assets/effects` and `assets/backgrounds`. The new title image is used directly as the interactive cover. The night-city reference contributes an architectural backdrop region without its baked-in hero/platforms. Dynamic blocks, currency, rockets, shields and effects are editable SVGs adapted to the supplied game-asset sheet; the transparent in-game hero and separately rotating bazooka remain independent layers.
 
 ## Smoke test
 

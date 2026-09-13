@@ -11,6 +11,8 @@ const DOUBLE_BLOCK_CHANCE := 0.14
 
 const HERO_TEX := preload("res://assets/characters/main_hero.png")
 const HERO_BODY_TEX := preload("res://assets/characters/main_hero_body.png")
+const MENU_COVER_TEX := preload("res://assets/backgrounds/menu_cover.png")
+const NIGHT_CITY_TEX := preload("res://assets/backgrounds/night_city_atlas.png")
 const PLAY_TEX := preload("res://assets/ui/play_icon.svg")
 const SHIELD_TEX := preload("res://assets/ui/shield_icon.svg")
 const MAGNET_TEX := preload("res://assets/ui/magnet_icon.svg")
@@ -19,6 +21,10 @@ const BAZOOKA_TEX := preload("res://assets/weapons/bazooka_reference.png")
 const BAZOOKA_BODY_TEX := preload("res://assets/weapons/bazooka_body.png")
 const ROCKET_TEX := preload("res://assets/weapons/rocket.svg")
 const BRICK_TEX := preload("res://assets/blocks/brick_tile.svg")
+const BRICK_GRAY_TEX := preload("res://assets/blocks/brick_gray.svg")
+const BRICK_WHITE_TEX := preload("res://assets/blocks/brick_white.svg")
+const BRICK_GREEN_TEX := preload("res://assets/blocks/brick_green.svg")
+const COIN_TEX := preload("res://assets/pickups/gold_coin.svg")
 const CASH_TEX := preload("res://assets/pickups/cash_bundle.svg")
 const GEM_TEX := preload("res://assets/pickups/rare_gem.svg")
 const EXPLOSION_TEX := preload("res://assets/effects/explosion.svg")
@@ -27,8 +33,8 @@ const CITY_TEX := preload("res://assets/backgrounds/city_silhouette.svg")
 const INK := Color("071426")
 const DEEP := Color("061b39")
 const PANEL_BLUE := Color("082b4b")
-const CYAN := Color("30d9ff")
-const PALE_CYAN := Color("b8f7ff")
+const CYAN := Color("80df41")
+const PALE_CYAN := Color("d6f4ae")
 const ORANGE := Color("f06a28")
 const GOLD := Color("ffd238")
 const LIME := Color("78e43b")
@@ -87,7 +93,7 @@ var particles: Array = []
 
 var settings_rect := Rect2(16, 18, 54, 54)
 var money_rect := Rect2(358, 18, 166, 54)
-var cta_rect := Rect2(146, 448, 248, 62)
+var cta_rect := Rect2(151, 754, 238, 90)
 var upgrade_rects: Array[Rect2] = []
 var nav_rects: Array[Rect2] = []
 var pause_rect := Rect2(474, 18, 50, 50)
@@ -248,6 +254,11 @@ func handle_menu_press(position: Vector2) -> void:
 		save_profile()
 		return
 	if menu_overlay != "":
+		if menu_overlay == "shop":
+			for index in upgrade_rects.size():
+				if upgrade_rects[index].has_point(position):
+					purchase_upgrade(index)
+					return
 		if menu_overlay == "daily" and Rect2(145, 540, 250, 64).has_point(position):
 			claim_daily_reward()
 		elif Rect2(120, 635, 300, 58).has_point(position) or not Rect2(60, 220, 420, 500).has_point(position):
@@ -269,11 +280,11 @@ func handle_menu_press(position: Vector2) -> void:
 				0:
 					menu_overlay = "shop"
 				1:
-					menu_overlay = "characters"
+					menu_overlay = "missions"
 				2:
 					start_game()
 				3:
-					menu_overlay = "leaderboard"
+					menu_overlay = "characters"
 				4:
 					menu_overlay = "daily"
 			return
@@ -746,21 +757,10 @@ func _draw() -> void:
 
 
 func draw_menu() -> void:
-	draw_sky(true)
-	draw_menu_decorations()
+	draw_texture_rect(MENU_COVER_TEX, Rect2(Vector2.ZERO, VIEW_SIZE), false)
 	draw_top_bar()
-	draw_logo()
-
-	var hero_float := sin(menu_time * 2.2) * 7.0
-	var hero_rect := Rect2(105, 222 + hero_float, 330, 280)
-	draw_texture_rect(HERO_TEX, hero_rect, false)
-	for i in 3:
-		var flame_x := 224.0 + float(i) * 47.0
-		draw_line(Vector2(flame_x, 477 + hero_float), Vector2(flame_x - 7, 505 + hero_float + sin(menu_time * 8 + i) * 5), GOLD, 5)
-
-	draw_cta()
-	draw_upgrade_cards()
-	draw_missions()
+	var pulse := 0.35 + 0.25 * sin(menu_time * 3.4)
+	draw_rect(cta_rect.grow(3), Color(0.59, 1.0, 0.13, pulse), false, 3)
 	draw_navigation()
 	if settings_open:
 		draw_settings()
@@ -769,21 +769,38 @@ func draw_menu() -> void:
 
 
 func draw_sky(menu_mode: bool) -> void:
-	for i in 24:
-		var t := float(i) / 23.0
-		var color := Color("064f9f").lerp(Color("18b9e9"), t)
-		if not menu_mode:
-			color = Color("032f73").lerp(Color("087fbd"), t)
-		draw_rect(Rect2(0, i * 40, 540, 42), color)
-	for i in 18:
-		var x := fmod(float(i * 89 + 43), 540.0)
-		var y := fmod(float(i * 151 + 80), 720.0)
-		draw_rect(Rect2(x, y, 2, 8), Color(1, 1, 1, 0.22))
-	draw_cloud(Vector2(55, 150), 0.72)
-	draw_cloud(Vector2(442, 185), 0.92)
-	draw_cloud(Vector2(110, 395), 0.48)
-	draw_cloud(Vector2(420, 520), 0.55)
-	draw_texture_rect(CITY_TEX, Rect2(0, 770, 540, 190), false, Color(1, 1, 1, 0.92))
+	for i in 30:
+		var t := float(i) / 29.0
+		draw_rect(Rect2(0, i * 32, 540, 33), Color("050d20").lerp(Color("173c66"), t))
+	for i in 75:
+		var x := fmod(float(i * 197 + 43), 538.0)
+		var y := fmod(float(i * 113 + 29), 635.0)
+		var sparkle := 0.35 + 0.22 * sin(menu_time * 2.2 + float(i))
+		draw_rect(Rect2(x, y, 2, 2), Color(0.75, 0.91, 0.98, sparkle))
+	draw_circle(Vector2(373, 148), 38, Color("f5edbd"))
+	draw_circle(Vector2(362, 138), 6, Color("b3ad91"))
+	draw_circle(Vector2(390, 156), 5, Color("b3ad91"))
+	draw_ghost_cloud(Vector2(75, 175), 0.9)
+	draw_ghost_cloud(Vector2(486, 280), 0.64)
+	draw_ghost_cloud(Vector2(268, 415), 0.54)
+	# The source is an unmodified reference atlas. This region contains architecture,
+	# not the baked-in hero and floating blocks from its upper half.
+	draw_texture_rect_region(NIGHT_CITY_TEX, Rect2(0, 608, 540, 352), Rect2(0, 980, 941, 692))
+	draw_rect(Rect2(0, 608, 540, 44), Color("102344", 0.2))
+
+
+func draw_ghost_cloud(center: Vector2, scale_value: float) -> void:
+	var blue := Color(0.46, 0.65, 0.68, 0.35)
+	var face := Color("0a1630")
+	draw_set_transform(center, sin(menu_time * 0.7 + center.x) * 0.03, Vector2.ONE * scale_value)
+	draw_circle(Vector2.ZERO, 33, blue)
+	draw_circle(Vector2(-25, 21), 24, blue)
+	draw_circle(Vector2(25, 20), 25, blue)
+	draw_colored_polygon(PackedVector2Array([Vector2(-28, 27), Vector2(0, 66), Vector2(20, 23)]), blue)
+	draw_circle(Vector2(-12, -3), 5.5, face)
+	draw_circle(Vector2(12, -3), 5.5, face)
+	draw_circle(Vector2(0, 19), 8, face)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
 func draw_cloud(position: Vector2, scale_value: float) -> void:
@@ -804,13 +821,13 @@ func draw_menu_decorations() -> void:
 
 
 func draw_top_bar() -> void:
-	draw_panel(settings_rect, Color("08233e"), CYAN, 3, 10)
+	draw_panel(settings_rect, Color("07140e"), CYAN, 3, 10)
 	for i in 8:
 		var angle := float(i) * TAU / 8.0
 		draw_rect(Rect2(settings_rect.get_center() + Vector2.from_angle(angle) * 15 - Vector2(3, 7), Vector2(6, 14)), WHITE)
 	draw_circle(settings_rect.get_center(), 10, WHITE)
 	draw_circle(settings_rect.get_center(), 4, PANEL_BLUE)
-	draw_panel(money_rect, Color("061729"), PALE_CYAN, 3, 8)
+	draw_panel(money_rect, Color("07140e"), CYAN, 3, 8)
 	draw_coin(Vector2(384, 45), 18)
 	draw_label(str(money), Vector2(406, 55), 25, WHITE, HORIZONTAL_ALIGNMENT_LEFT, 85)
 	draw_panel(Rect2(483, 25, 34, 40), Color("38c43e"), Color("0b5b22"), 3, 7)
@@ -831,13 +848,13 @@ func draw_cta() -> void:
 	draw_texture_rect(PLAY_TEX, Rect2(cta_rect.position.x + 14, cta_rect.position.y + 13, 38, 38), false)
 
 
-func draw_upgrade_cards() -> void:
+func draw_upgrade_cards(base_y: float = 521.0) -> void:
 	upgrade_rects.clear()
 	var keys := ["boots", "bazooka", "magnet", "shield"]
 	var titles := ["JET BOOTS", "BAZOOKA", "CASH MAGNET", "SHIELD"]
 	var icons := [BOOTS_TEX, BAZOOKA_TEX, MAGNET_TEX, SHIELD_TEX]
 	for i in 4:
-		var rect := Rect2(8 + i * 133, 521, 126, 164)
+		var rect := Rect2(8 + i * 133, base_y, 126, 164)
 		upgrade_rects.append(rect)
 		draw_panel(rect, Color("071f38"), CYAN, 3, 9)
 		draw_label(titles[i], Vector2(rect.position.x + 2, rect.position.y + 23), 14, GOLD, HORIZONTAL_ALIGNMENT_CENTER, rect.size.x - 4, 2)
@@ -876,12 +893,12 @@ func draw_missions() -> void:
 
 func draw_navigation() -> void:
 	nav_rects.clear()
-	var names := ["SHOP", "CHARACTERS", "PLAY", "LEADERBOARD", "DAILY\nREWARD"]
+	var names := ["SHOP", "MISSIONS", "PLAY", "CHARACTERS", "DAILY\nREWARD"]
 	for i in 5:
 		var rect := Rect2(5 + i * 107, 870, 102, 84)
 		nav_rects.append(rect)
 		var active := i == 2
-		draw_panel(rect, Color("39c83c") if active else Color("082744"), LIME if active else CYAN, 3, 9)
+		draw_panel(rect, Color("328d0b") if active else Color(0.02, 0.07, 0.05, 0.94), LIME if active else Color("48772b"), 3, 9)
 		if active:
 			draw_texture_rect(PLAY_TEX, Rect2(rect.position.x + 31, rect.position.y + 8, 40, 40), false)
 		var lines: PackedStringArray = names[i].split("\n")
@@ -916,15 +933,27 @@ func draw_toggle(rect: Rect2, text: String, enabled: bool) -> void:
 
 func draw_menu_overlay() -> void:
 	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color(0, 0, 0, 0.72))
-	var rect := Rect2(60, 220, 420, 500)
+	var rect := Rect2(4, 220, 532, 500) if menu_overlay == "shop" else Rect2(60, 220, 420, 500)
 	draw_panel(rect, Color("071f38"), CYAN, 4, 15)
 	match menu_overlay:
 		"shop":
-			draw_label("UPGRADE SHOP", Vector2(60, 282), 32, GOLD, HORIZONTAL_ALIGNMENT_CENTER, 420, 4)
-			draw_texture_rect(BOOTS_TEX, Rect2(105, 330, 100, 100), false)
-			draw_texture_rect(BAZOOKA_TEX, Rect2(270, 350, 130, 80), false)
-			draw_label("Tap any upgrade card on the home screen.", Vector2(90, 482), 17, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 360, 2)
-			draw_label("Every level improves your run.", Vector2(90, 515), 16, PALE_CYAN, HORIZONTAL_ALIGNMENT_CENTER, 360, 2)
+			draw_label("UPGRADE SHOP", Vector2(60, 286), 32, LIME, HORIZONTAL_ALIGNMENT_CENTER, 420, 4)
+			draw_upgrade_cards(340)
+			draw_label("Every level improves your run.", Vector2(90, 552), 16, PALE_CYAN, HORIZONTAL_ALIGNMENT_CENTER, 360, 2)
+		"missions":
+			draw_label("MISSIONS", Vector2(60, 286), 32, LIME, HORIZONTAL_ALIGNMENT_CENTER, 420, 4)
+			var titles := ["SMASH 50 BRICKS", "COLLECT 250 CASH", "FLY 500 METERS"]
+			var values := [smashed_total, cash_total, best_meters]
+			var targets := [50, 250, 500]
+			var rewards := [1000, 1500, 1250]
+			for i in 3:
+				var row := Rect2(82, 314 + i * 100, 376, 86)
+				draw_panel(row, Color("101b26"), Color("4b7d2c"), 2, 7)
+				draw_label(titles[i], row.position + Vector2(12, 26), 17, WHITE, HORIZONTAL_ALIGNMENT_LEFT, 255, 2)
+				draw_label(str(mini(values[i], targets[i])) + "/" + str(targets[i]), row.position + Vector2(274, 26), 16, PALE_CYAN, HORIZONTAL_ALIGNMENT_CENTER, 90, 2)
+				draw_progress(Rect2(row.position.x + 12, row.position.y + 42, 246, 19), float(values[i]) / float(targets[i]))
+				draw_coin(row.position + Vector2(284, 53), 11)
+				draw_label(str(rewards[i]), row.position + Vector2(301, 59), 16, GOLD, HORIZONTAL_ALIGNMENT_LEFT, 62, 2)
 		"characters":
 			draw_label("CHARACTERS", Vector2(60, 282), 32, GOLD, HORIZONTAL_ALIGNMENT_CENTER, 420, 4)
 			draw_texture_rect(HERO_TEX, Rect2(135, 310, 270, 228), false)
@@ -1115,18 +1144,21 @@ func draw_particles() -> void:
 
 
 func draw_brick(rect: Rect2, kind: int, hp: int, max_hp: int) -> void:
-	draw_texture_rect(BRICK_TEX, rect, false)
+	var brick_texture := BRICK_TEX
 	if kind == 1:
-		draw_rect(rect.grow(-3), Color(0.25, 0.32, 0.38, 0.72), false, 5)
-		for x in range(int(rect.position.x + 18), int(rect.end.x - 8), 28):
-			draw_circle(Vector2(x, rect.position.y + 10), 3, Color("c8d3da"))
+		brick_texture = BRICK_GRAY_TEX
 	elif kind == 2:
+		brick_texture = BRICK_WHITE_TEX
+	elif kind == 3:
+		brick_texture = BRICK_GREEN_TEX
+	draw_texture_rect(brick_texture, rect, false)
+	if kind == 2:
 		var points := PackedVector2Array([
 			rect.position + Vector2(12, 34), rect.position + Vector2(30, 16),
 			rect.position + Vector2(50, 38), rect.position + Vector2(72, 14),
 			rect.position + Vector2(92, 37), rect.position + Vector2(112, 19)
 		])
-		draw_polyline(points, CYAN, 6)
+		draw_polyline(points, LIME, 5)
 	elif kind == 3:
 		draw_coin(rect.get_center(), 16)
 	if hp < max_hp:
@@ -1135,10 +1167,7 @@ func draw_brick(rect: Rect2, kind: int, hp: int, max_hp: int) -> void:
 
 
 func draw_coin(center: Vector2, radius: float) -> void:
-	draw_circle(center + Vector2(2, 3), radius + 2, Color("5d3b10"))
-	draw_circle(center, radius, GOLD)
-	draw_circle(center, radius * 0.70, Color("f3ae16"))
-	draw_label("$", center + Vector2(-radius, radius * 0.55), int(radius * 1.15), WHITE, HORIZONTAL_ALIGNMENT_CENTER, radius * 2, 1)
+	draw_texture_rect(COIN_TEX, Rect2(center - Vector2.ONE * radius, Vector2.ONE * radius * 2.0), false)
 
 
 func draw_progress(rect: Rect2, value: float) -> void:
