@@ -9,12 +9,19 @@ const BLOCK_GAP_MIN := 135.0
 const BLOCK_GAP_MAX := 185.0
 const DOUBLE_BLOCK_CHANCE := 0.14
 const GHOST_SPAWN_CHANCE := 0.38
+const GHOST_ALERT_DISTANCE := 200.0
+const GHOST_CALM_DISTANCE := 250.0
+const GHOST_TRANSITION_TIME := 0.12
+const GHOST_DRAW_SIZE := Vector2(92, 92)
 const MAX_HEALTH := 3
 
 const HERO_TEX := preload("res://assets/characters/main_hero.png")
 const HERO_BODY_TEX := preload("res://assets/characters/main_hero_body.png")
 const MENU_COVER_TEX := preload("res://assets/backgrounds/menu_cover.png")
 const NIGHT_CITY_TEX := preload("res://assets/backgrounds/night_city_atlas.png")
+const NIGHT_CITY_VIDEO := preload("res://assets/backgrounds/night_city_loop.ogv")
+const NIGHT_CITY_POSTER := preload("res://assets/backgrounds/night_city_poster.png")
+const GHOST_FRAMES := preload("res://assets/characters/ghost/animations.tres")
 const PLAY_TEX := preload("res://assets/ui/play_icon.svg")
 const SHIELD_TEX := preload("res://assets/ui/shield_icon.svg")
 const MAGNET_TEX := preload("res://assets/ui/magnet_icon.svg")
@@ -93,9 +100,12 @@ var current_shake_offset := Vector2.ZERO
 var spawn_cursor_y := -100.0
 var blocks: Array = []
 var ghosts: Array = []
+var ghost_deaths: Array = []
 var rockets: Array = []
 var pickups: Array = []
 var particles: Array = []
+var background_layer: Control
+var background_video: VideoStreamPlayer
 
 var settings_rect := Rect2(16, 18, 54, 54)
 var money_rect := Rect2(358, 18, 166, 54)
@@ -108,6 +118,7 @@ var pause_rect := Rect2(474, 18, 50, 50)
 func _ready() -> void:
 	rng.randomize()
 	load_profile()
+	setup_video_background()
 	if OS.get_cmdline_user_args().has("--capture-game"):
 		start_game()
 		tutorial_visible = false
@@ -116,14 +127,55 @@ func _ready() -> void:
 		start_game()
 		tutorial_visible = false
 		ghosts = [
-			{"pos": Vector2(105, 255), "vx": 0.0, "phase": 0.0, "variant": 0},
-			{"pos": Vector2(390, 390), "vx": 0.0, "phase": 1.0, "variant": 1},
-			{"pos": Vector2(200, 535), "vx": 0.0, "phase": 2.0, "variant": 2}
+			make_ghost(Vector2(105, 255), 0.0),
+			make_ghost(Vector2(390, 390), 0.0),
+			make_ghost(Vector2(200, 535), 0.0)
 		]
 	queue_redraw()
 
 
+func setup_video_background() -> void:
+	background_layer = Control.new()
+	background_layer.name = "VideoBackground"
+	background_layer.z_index = -10
+	background_layer.size = VIEW_SIZE
+	background_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(background_layer)
+	var poster := TextureRect.new()
+	poster.texture = NIGHT_CITY_POSTER
+	poster.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	poster.size = VIEW_SIZE
+	poster.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	poster.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	background_layer.add_child(poster)
+	background_video = VideoStreamPlayer.new()
+	background_video.name = "NightCityLoop"
+	background_video.stream = NIGHT_CITY_VIDEO
+	background_video.expand = true
+	background_video.size = VIEW_SIZE
+	background_video.loop = true
+	background_video.volume = 0.0
+	background_video.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	background_video.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	background_layer.add_child(background_video)
+	sync_video_background()
+
+
+func sync_video_background() -> void:
+	if not is_instance_valid(background_video):
+		return
+	background_layer.visible = screen != Screen.MENU
+	if screen == Screen.MENU:
+		if background_video.is_playing():
+			background_video.stop()
+		return
+	if not background_video.is_playing():
+		background_video.play()
+	background_video.paused = paused or tutorial_visible or screen == Screen.GAME_OVER
+
+
 func _process(delta: float) -> void:
+	sync_video_background()
 	menu_time += delta
 	toast_timer = maxf(0.0, toast_timer - delta)
 	shoot_timer = maxf(0.0, shoot_timer - delta)
@@ -317,6 +369,7 @@ func start_game() -> void:
 	last_aim_target = Vector2(270, 820)
 	blocks.clear()
 	ghosts.clear()
+	ghost_deaths.clear()
 	rockets.clear()
 	pickups.clear()
 	particles.clear()
@@ -325,12 +378,16 @@ func start_game() -> void:
 		spawn_block(spawn_cursor_y)
 		spawn_cursor_y -= rng.randf_range(BLOCK_GAP_MIN, BLOCK_GAP_MAX)
 	tutorial_visible = true
+	if is_instance_valid(background_video):
+		background_video.stop()
+	sync_video_background()
 
 
 func return_to_menu() -> void:
 	screen = Screen.MENU
 	paused = false
 	tutorial_visible = false
+	sync_video_background()
 	save_profile()
 
 
@@ -390,6 +447,7 @@ func update_game(delta: float) -> void:
 
 	spawn_world_if_needed()
 	update_ghosts(delta)
+	update_ghost_deaths(delta)
 	update_rockets(delta)
 	update_pickups(delta)
 	update_particles(delta)
@@ -415,6 +473,8 @@ func shift_world(amount: float) -> void:
 		block["pos"] = block["pos"] + Vector2(0, amount)
 	for ghost in ghosts:
 		ghost["pos"] = ghost["pos"] + Vector2(0, amount)
+	for death in ghost_deaths:
+		death["pos"] = death["pos"] + Vector2(0, amount)
 	for rocket in rockets:
 		rocket["pos"] = rocket["pos"] + Vector2(0, amount)
 	for pickup in pickups:
@@ -460,7 +520,24 @@ func spawn_block(y_position: float) -> void:
 		pickups.append({"pos": Vector2(x + width * 0.5, y_position - 36), "vel": Vector2.ZERO, "rare": true, "value": 150})
 	# Keep the opening safe; later rows can contain a drifting ghost above a brick.
 	if y_position < 520.0 and rng.randf() < GHOST_SPAWN_CHANCE:
-		ghosts.append({"pos": Vector2(clampf(x + width * 0.5 + rng.randf_range(-55, 55), 55, 485), y_position - 79), "vx": rng.randf_range(34, 62) * (-1.0 if rng.randf() < 0.5 else 1.0), "phase": rng.randf_range(0, TAU), "variant": rng.randi_range(0, 3)})
+		ghosts.append(make_ghost(Vector2(clampf(x + width * 0.5 + rng.randf_range(-55, 55), 55, 485), y_position - 79), rng.randf_range(34, 62) * (-1.0 if rng.randf() < 0.5 else 1.0)))
+
+
+func make_ghost(position: Vector2, horizontal_speed: float) -> Dictionary:
+	return {"pos": position, "vx": horizontal_speed, "phase": rng.randf_range(0, TAU),
+		"state": "idle", "animation_time": rng.randf_range(0, ghost_clip_duration("idle")),
+		"transition": GHOST_TRANSITION_TIME, "previous_state": "idle", "previous_time": 0.0}
+
+
+func ghost_clip_duration(clip: String) -> float:
+	return float(GHOST_FRAMES.get_frame_count(clip)) / GHOST_FRAMES.get_animation_speed(clip)
+
+
+func ghost_frame(clip: String, animation_time: float) -> Texture2D:
+	var count := GHOST_FRAMES.get_frame_count(clip)
+	var frame := int(animation_time * GHOST_FRAMES.get_animation_speed(clip))
+	frame = frame % count if GHOST_FRAMES.get_animation_loop(clip) else mini(frame, count - 1)
+	return GHOST_FRAMES.get_frame_texture(clip, frame)
 
 
 func update_ghosts(delta: float) -> void:
@@ -473,6 +550,28 @@ func update_ghosts(delta: float) -> void:
 			position.x = clampf(position.x, 48, 492)
 			ghost["vx"] = -float(ghost["vx"])
 		ghost["pos"] = position
+		var state: String = ghost.get("state", "idle")
+		var distance := position.distance_to(player_pos)
+		var next_state := state
+		if state == "idle" and distance <= GHOST_ALERT_DISTANCE:
+			next_state = "alert"
+		elif state == "alert" and distance >= GHOST_CALM_DISTANCE:
+			next_state = "idle"
+		if next_state != state:
+			ghost["previous_state"] = state
+			ghost["previous_time"] = ghost.get("animation_time", 0.0)
+			ghost["state"] = next_state
+			ghost["animation_time"] = 0.0
+			ghost["transition"] = 0.0
+		ghost["animation_time"] = fmod(float(ghost.get("animation_time", 0.0)) + delta, ghost_clip_duration(next_state))
+		ghost["transition"] = minf(float(ghost.get("transition", GHOST_TRANSITION_TIME)) + delta, GHOST_TRANSITION_TIME)
+
+
+func update_ghost_deaths(delta: float) -> void:
+	for index in range(ghost_deaths.size() - 1, -1, -1):
+		ghost_deaths[index]["time"] = float(ghost_deaths[index]["time"]) + delta
+		if float(ghost_deaths[index]["time"]) >= ghost_clip_duration("death"):
+			ghost_deaths.remove_at(index)
 
 
 func update_rockets(delta: float) -> void:
@@ -684,9 +783,7 @@ func spawn_hit_sparks(position: Vector2) -> void:
 
 
 func spawn_ghost_pop(position: Vector2) -> void:
-	for i in 24:
-		var velocity := Vector2.from_angle(rng.randf_range(0, TAU)) * rng.randf_range(75, 230)
-		particles.append(make_particle(position, velocity, WHITE if i % 4 else LIME, rng.randf_range(4, 10), rng.randf_range(0.3, 0.65), -30))
+	ghost_deaths.append({"pos": position, "time": 0.0})
 
 
 func spawn_money_burst(position: Vector2, rare: bool) -> void:
@@ -807,65 +904,22 @@ func draw_menu() -> void:
 	draw_rect(cta_rect.grow(3), Color(0.59, 1.0, 0.13, pulse), false, 3)
 
 
-func draw_sky(menu_mode: bool) -> void:
-	for i in 30:
-		var t := float(i) / 29.0
-		draw_rect(Rect2(0, i * 32, 540, 33), Color("050d20").lerp(Color("173c66"), t))
-	for i in 75:
-		var x := fmod(float(i * 197 + 43), 538.0)
-		var y := fmod(float(i * 113 + 29), 635.0)
-		var sparkle := 0.35 + 0.22 * sin(menu_time * 2.2 + float(i))
-		draw_rect(Rect2(x, y, 2, 2), Color(0.75, 0.91, 0.98, sparkle))
-	draw_circle(Vector2(373, 148), 38, Color("f5edbd"))
-	draw_circle(Vector2(362, 138), 6, Color("b3ad91"))
-	draw_circle(Vector2(390, 156), 5, Color("b3ad91"))
-	draw_ghost_cloud(Vector2(75, 175), 0.9)
-	draw_ghost_cloud(Vector2(486, 280), 0.64)
-	draw_ghost_cloud(Vector2(268, 415), 0.54)
-	# The source is an unmodified reference atlas. This region contains architecture,
-	# not the baked-in hero and floating blocks from its upper half.
-	draw_texture_rect_region(NIGHT_CITY_TEX, Rect2(0, 608, 540, 352), Rect2(0, 980, 941, 692))
-	draw_rect(Rect2(0, 608, 540, 44), Color("102344", 0.2))
-
-
-func draw_ghost_cloud(center: Vector2, scale_value: float) -> void:
-	var blue := Color(0.46, 0.65, 0.68, 0.35)
-	var face := Color("0a1630")
-	draw_set_transform(center, sin(menu_time * 0.7 + center.x) * 0.03, Vector2.ONE * scale_value)
-	draw_circle(Vector2.ZERO, 33, blue)
-	draw_circle(Vector2(-25, 21), 24, blue)
-	draw_circle(Vector2(25, 20), 25, blue)
-	draw_colored_polygon(PackedVector2Array([Vector2(-28, 27), Vector2(0, 66), Vector2(20, 23)]), blue)
-	draw_circle(Vector2(-12, -3), 5.5, face)
-	draw_circle(Vector2(12, -3), 5.5, face)
-	draw_circle(Vector2(0, 19), 8, face)
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-
-
 func draw_enemy_ghost(ghost: Dictionary) -> void:
-	var center: Vector2 = ghost["pos"] + current_shake_offset
-	var variant: int = ghost["variant"]
-	var wobble := sin(float(ghost["phase"])) * 0.08
-	var scale_value := 0.90 + float(variant % 3) * 0.07
-	draw_set_transform(center, wobble, Vector2.ONE * scale_value)
-	draw_circle(Vector2.ZERO, 35, Color(0.85, 1.0, 0.88, 0.12))
-	# Black silhouette, white puffy hands and head, and a tapering wisp tail.
-	draw_colored_polygon(PackedVector2Array([Vector2(-20, 7), Vector2(-15, 29), Vector2(-5, 38), Vector2(3, 32), Vector2(12, 36), Vector2(17, 5)]), INK)
-	draw_circle(Vector2(-23, 5), 12, INK)
-	draw_circle(Vector2(23, 4), 12, INK)
-	draw_circle(Vector2(0, -8), 25, INK)
-	draw_colored_polygon(PackedVector2Array([Vector2(-16, 5), Vector2(-11, 27), Vector2(-4, 32), Vector2(3, 26), Vector2(9, 30), Vector2(13, 5)]), WHITE)
-	draw_circle(Vector2(-23, 5), 9, WHITE)
-	draw_circle(Vector2(23, 4), 9, WHITE)
-	draw_circle(Vector2(0, -8), 22, WHITE)
-	draw_circle(Vector2(-17, -19), 8, WHITE)
-	draw_circle(Vector2(16, -19), 8, WHITE)
-	draw_circle(Vector2(-9, -15), 4.5, INK)
-	draw_circle(Vector2(9, -15), 4.5, INK)
-	draw_colored_polygon(PackedVector2Array([Vector2(-7, -1), Vector2(-5, -6), Vector2(2, -7), Vector2(7, -2), Vector2(5, 10), Vector2(0, 14), Vector2(-5, 9)]), INK)
-	draw_circle(Vector2(-19, 9), 2, Color("c8d4d5"))
-	draw_circle(Vector2(18, 8), 2, Color("c8d4d5"))
-	draw_set_transform(current_shake_offset, 0.0, Vector2.ONE)
+	var clip: String = ghost.get("state", "idle")
+	var rect := Rect2(ghost["pos"] - GHOST_DRAW_SIZE * 0.5, GHOST_DRAW_SIZE)
+	var blend := clampf(float(ghost.get("transition", GHOST_TRANSITION_TIME)) / GHOST_TRANSITION_TIME, 0.0, 1.0)
+	if blend < 1.0:
+		draw_texture_rect(ghost_frame(ghost.get("previous_state", "idle"), float(ghost.get("previous_time", 0.0))), rect, false, Color(1, 1, 1, 1.0 - blend))
+	draw_texture_rect(ghost_frame(clip, float(ghost.get("animation_time", 0.0))), rect, false, Color(1, 1, 1, blend))
+
+
+func draw_ghost_deaths() -> void:
+	for death in ghost_deaths:
+		var elapsed: float = death["time"]
+		# Let the supplied dispersal finish, then fade only its remaining edge wisps.
+		var alpha := clampf((ghost_clip_duration("death") - elapsed) / 0.18, 0.0, 1.0)
+		var size := GHOST_DRAW_SIZE * lerpf(1.0, 1.5, clampf(elapsed / 0.8, 0.0, 1.0))
+		draw_texture_rect(ghost_frame("death", elapsed), Rect2(death["pos"] - size * 0.5, size), false, Color(1, 1, 1, alpha))
 
 
 func draw_cloud(position: Vector2, scale_value: float) -> void:
@@ -1040,11 +1094,11 @@ func draw_game() -> void:
 	if camera_shake > 0.0:
 		current_shake_offset = Vector2(rng.randf_range(-1, 1), rng.randf_range(-1, 1)) * camera_shake * 6.0
 	draw_set_transform(current_shake_offset, 0.0, Vector2.ONE)
-	draw_sky(false)
 	for block in blocks:
 		draw_brick(Rect2(block["pos"], block["size"]), int(block["kind"]), int(block["hp"]), int(block["max_hp"]))
 	for ghost in ghosts:
 		draw_enemy_ghost(ghost)
+	draw_ghost_deaths()
 	for pickup in pickups:
 		var bob := sin(menu_time * 7.0 + pickup["pos"].x) * 3.0
 		if bool(pickup["rare"]):

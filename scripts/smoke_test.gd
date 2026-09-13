@@ -2,10 +2,16 @@ extends SceneTree
 
 
 func _init() -> void:
+	_run.call_deferred()
+
+
+func _run() -> void:
 	var packed: PackedScene = load("res://scenes/main.tscn")
 	assert(packed != null, "Main scene must load")
 	var game = packed.instantiate()
 	root.add_child(game)
+	assert(game.background_video != null and game.background_video.loop, "Background video must be ready to loop")
+	assert(not game.background_video.is_playing(), "Title screen must not decode the game background")
 	game.handle_menu_press(Vector2(40, 40))
 	assert(game.screen == 0, "Removed menu controls must not respond")
 	game.handle_menu_press(Vector2(270, 905))
@@ -14,6 +20,8 @@ func _init() -> void:
 	assert(game.screen == 1, "The painted START button must launch the game")
 	game.start_game()
 	game.tutorial_visible = false
+	game.sync_video_background()
+	assert(game.background_video.is_playing() and not game.background_video.paused, "The level must play the background video")
 	game.player_pos = Vector2(270, 460)
 	game.player_vel = Vector2.ZERO
 	var shot_target: Vector2 = game.player_pos + Vector2(140, 240)
@@ -98,10 +106,18 @@ func _init() -> void:
 	game.rockets = [{"pos": ghost_position - Vector2(0, 10), "vel": Vector2(0, 690), "life": 2.0, "trail": 0.0}]
 	game.update_rockets(1.0 / 60.0)
 	assert(game.ghosts.is_empty() and game.rockets.is_empty(), "A rocket must pop a ghost")
-	assert(game.particles.size() > 0, "A popped ghost must create a visible burst")
+	assert(game.ghost_deaths.size() == 1, "A popped ghost must start the supplied death clip")
+	game.pop_ghosts_near(ghost_position, 80)
+	assert(game.ghost_deaths.size() == 1, "An already defeated ghost must not restart its death clip")
+	game.update_ghost_deaths(0.5)
+	game.shift_world(65)
+	assert(game.ghost_deaths[0]["pos"].distance_to(ghost_position + Vector2(0, 65)) < 0.01, "Death effects must follow world scrolling")
 	game.ghosts = [{"pos": Vector2(200, 250), "vx": 0.0, "phase": 0.0, "variant": 1}]
 	game.damage_explosion(Vector2(220, 250), -1)
 	assert(game.ghosts.is_empty(), "Nearby explosions must pop ghosts too")
+	assert(game.ghost_deaths.size() == 2, "Each defeated ghost must have its own death playback")
+	game.update_ghost_deaths(2.0)
+	assert(game.ghost_deaths.is_empty(), "Completed death clips must disappear, not loop")
 	game.player_pos = Vector2(270, 460)
 	game.ghosts = [{"pos": game.player_pos + Vector2(0, -7), "vx": 0.0, "phase": 0.0, "variant": 2}]
 	game.check_player_ghost_collisions()
@@ -118,6 +134,31 @@ func _init() -> void:
 	game.start_game()
 	game.tutorial_visible = false
 	assert(game.health == 3 and game.shield_available, "Restart must restore hearts and shield")
+	assert(game.ghost_deaths.is_empty(), "Restart must clear death effects")
+	game.player_pos = Vector2(270, 550)
+	var animated_ghost: Dictionary = game.make_ghost(Vector2(270, 200), 0.0)
+	game.ghosts = [animated_ghost]
+	game.update_ghosts(0.1)
+	assert(animated_ghost["state"] == "idle", "A distant ghost must use the calm clip")
+	game.player_pos = animated_ghost["pos"] + Vector2(0, 170)
+	game.update_ghosts(0.1)
+	assert(animated_ghost["state"] == "alert", "Approaching a ghost must activate the angry clip")
+	game.player_pos = animated_ghost["pos"] + Vector2(0, 225)
+	game.update_ghosts(0.1)
+	assert(animated_ghost["state"] == "alert", "Small movements near the threshold must not flicker states")
+	game.player_pos = animated_ghost["pos"] + Vector2(0, 300)
+	game.update_ghosts(0.1)
+	assert(animated_ghost["state"] == "idle", "Moving away must restore the calm clip")
+	game.spawn_ghost_pop(Vector2(160, 240))
+	game.paused = true
+	var animation_before: float = animated_ghost["animation_time"]
+	game._process(0.2)
+	assert(animated_ghost["animation_time"] == animation_before and game.ghost_deaths[0]["time"] == 0.0, "Pause must freeze live and death animations")
+	assert(game.background_video.paused, "Pause must freeze the video too")
+	game.return_to_menu()
+	assert(not game.background_video.is_playing() and not game.background_layer.visible, "Returning to START must stop the background")
+	game.start_game()
+	game.tutorial_visible = false
 	game.ghosts.clear()
 
 	game.player_pos = Vector2(270, 300)

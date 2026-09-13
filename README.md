@@ -32,7 +32,9 @@ godot --path .
 - The vertical world is generated continuously above the player, with brick structures positioned for downward and diagonal shots.
 - Normal, reinforced, graffiti and cash bricks have distinct behavior/appearance.
 - Rockets have directional flight, trails and explosion radius; destroyed bricks create debris and can drop cash.
-- White ghost enemies drift between brick rows. A rocket or nearby explosion pops them; touching one consumes the shield or one of three hearts, with brief invulnerability and knockback.
+- Ghost enemies use the supplied videos as transparent animated sprites: calm while distant, angry within 200 pixels of the hero, and calm again beyond 250 pixels. The gap keeps their expressions from flickering at the boundary.
+- A rocket or nearby explosion removes the ghost's collision immediately and plays the supplied death animation once. Touching a live ghost consumes the shield or one of three hearts, with brief invulnerability and knockback.
+- The supplied night-city video loops behind the level at 540×960, 24 FPS. Pausing freezes the video and ghost animations; returning to START stops the video.
 - The original platform bounce is restored; bazooka recoil remains an additional trajectory-control impulse.
 - Jet Boots, Bazooka, Cash Magnet and Shield levels affect the live run.
 - Three persistent missions automatically pay rewards once their targets are reached.
@@ -40,7 +42,15 @@ godot --path .
 
 ## Asset layout
 
-Project art lives in `assets/ui`, `assets/characters`, `assets/weapons`, `assets/blocks`, `assets/pickups`, `assets/effects` and `assets/backgrounds`. The new title image is used directly as the interactive cover. The night-city reference contributes an architectural backdrop region without its baked-in hero/platforms. Dynamic blocks, currency, rockets, shields and effects are editable SVGs adapted to the supplied game-asset sheet; the transparent in-game hero and separately rotating bazooka remain independent layers.
+Project art lives in `assets/ui`, `assets/characters`, `assets/weapons`, `assets/blocks`, `assets/pickups`, `assets/effects` and `assets/backgrounds`. The title image is used directly as the interactive cover. `assets/backgrounds/night_city_loop.ogv` is the in-game video, with a matching poster while the first frame loads. Dynamic blocks, currency, rockets, shields and effects are editable SVGs; the transparent in-game hero and separately rotating bazooka remain independent layers.
+
+`assets/characters/ghost/animations.tres` shares three RGBA atlases between enemies, with independent playback times. The 149 frames were extracted from the supplied MP4 clips at 24 FPS, keyed before downscaling to preserve outlines, and cleaned of magenta edge spill. Rebuild the assets from the original BAZOOKA folder with Python and FFmpeg:
+
+```powershell
+python tools/prepare_video_assets.py --ffmpeg <ffmpeg.exe> --source-dir <BAZOOKA-folder>
+```
+
+The originals are not modified. The preparation script requires FFmpeg with the PNG and Theora encoders; the game itself needs no Python or FFmpeg.
 
 ## Smoke test
 
