@@ -88,6 +88,38 @@ func _init() -> void:
 		game.update_visual_controller(1.0 / 60.0)
 	assert(not game.facing_left and game.weapon_anchor_x > 0, "Rightward aim must flip the hero and grip together")
 
+	game.start_game()
+	game.tutorial_visible = false
+	game.blocks.clear()
+	game.ghosts = [{"pos": Vector2(180, 250), "vx": 45.0, "phase": 0.0, "variant": 0}]
+	game.update_ghosts(0.1)
+	assert(game.ghosts[0]["pos"].x > 180, "Ghosts must drift during a run")
+	var ghost_position: Vector2 = game.ghosts[0]["pos"]
+	game.rockets = [{"pos": ghost_position - Vector2(0, 10), "vel": Vector2(0, 690), "life": 2.0, "trail": 0.0}]
+	game.update_rockets(1.0 / 60.0)
+	assert(game.ghosts.is_empty() and game.rockets.is_empty(), "A rocket must pop a ghost")
+	assert(game.particles.size() > 0, "A popped ghost must create a visible burst")
+	game.ghosts = [{"pos": Vector2(200, 250), "vx": 0.0, "phase": 0.0, "variant": 1}]
+	game.damage_explosion(Vector2(220, 250), -1)
+	assert(game.ghosts.is_empty(), "Nearby explosions must pop ghosts too")
+	game.player_pos = Vector2(270, 460)
+	game.ghosts = [{"pos": game.player_pos + Vector2(0, -7), "vx": 0.0, "phase": 0.0, "variant": 2}]
+	game.check_player_ghost_collisions()
+	assert(not game.shield_available and game.health == 3, "Shield must absorb the first ghost touch")
+	game.check_player_ghost_collisions()
+	assert(game.health == 3, "Contact cooldown must prevent repeated damage each frame")
+	game.contact_cooldown = 0.0
+	game.check_player_ghost_collisions()
+	assert(game.health == 2, "Unshielded ghost touch must remove one heart")
+	game.health = 1
+	game.contact_cooldown = 0.0
+	game.check_player_ghost_collisions()
+	assert(game.screen == 2, "Losing the last heart must end the run")
+	game.start_game()
+	game.tutorial_visible = false
+	assert(game.health == 3 and game.shield_available, "Restart must restore hearts and shield")
+	game.ghosts.clear()
+
 	game.player_pos = Vector2(270, 300)
 	game.player_vel = Vector2(0, -360)
 	game.update_game(1.0 / 60.0)

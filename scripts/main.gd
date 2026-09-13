@@ -8,6 +8,8 @@ const INITIAL_BLOCK_ROWS := 7
 const BLOCK_GAP_MIN := 135.0
 const BLOCK_GAP_MAX := 185.0
 const DOUBLE_BLOCK_CHANCE := 0.14
+const GHOST_SPAWN_CHANCE := 0.38
+const MAX_HEALTH := 3
 
 const HERO_TEX := preload("res://assets/characters/main_hero.png")
 const HERO_BODY_TEX := preload("res://assets/characters/main_hero_body.png")
@@ -70,6 +72,9 @@ var shield_available := true
 var shoot_timer := 0.0
 var reload_timer := 0.0
 var hit_timer := 0.0
+var contact_cooldown := 0.0
+var damage_flash := 0.0
+var health := MAX_HEALTH
 var flame_timer := 0.0
 var recoil_anim := 0.0
 var camera_shake := 0.0
@@ -87,6 +92,7 @@ var weapon_anchor_x := 22.0
 var current_shake_offset := Vector2.ZERO
 var spawn_cursor_y := -100.0
 var blocks: Array = []
+var ghosts: Array = []
 var rockets: Array = []
 var pickups: Array = []
 var particles: Array = []
@@ -106,6 +112,14 @@ func _ready() -> void:
 		start_game()
 		tutorial_visible = false
 		launch_player(Vector2(360, 820))
+	elif OS.get_cmdline_user_args().has("--capture-ghosts"):
+		start_game()
+		tutorial_visible = false
+		ghosts = [
+			{"pos": Vector2(105, 255), "vx": 0.0, "phase": 0.0, "variant": 0},
+			{"pos": Vector2(390, 390), "vx": 0.0, "phase": 1.0, "variant": 1},
+			{"pos": Vector2(200, 535), "vx": 0.0, "phase": 2.0, "variant": 2}
+		]
 	queue_redraw()
 
 
@@ -115,6 +129,8 @@ func _process(delta: float) -> void:
 	shoot_timer = maxf(0.0, shoot_timer - delta)
 	reload_timer = maxf(0.0, reload_timer - delta)
 	hit_timer = maxf(0.0, hit_timer - delta)
+	contact_cooldown = maxf(0.0, contact_cooldown - delta)
+	damage_flash = maxf(0.0, damage_flash - delta * 3.0)
 	flame_timer = maxf(0.0, flame_timer - delta)
 	recoil_anim = maxf(0.0, recoil_anim - delta)
 	weapon_kick = maxf(0.0, weapon_kick - delta * 6.5)
@@ -283,6 +299,9 @@ func start_game() -> void:
 	shoot_timer = 0.0
 	reload_timer = 0.0
 	hit_timer = 0.0
+	contact_cooldown = 0.0
+	damage_flash = 0.0
+	health = MAX_HEALTH
 	recoil_anim = 0.0
 	weapon_kick = 0.0
 	body_angular_kick = 0.0
@@ -297,6 +316,7 @@ func start_game() -> void:
 	weapon_anchor_x = 22.0
 	last_aim_target = Vector2(270, 820)
 	blocks.clear()
+	ghosts.clear()
 	rockets.clear()
 	pickups.clear()
 	particles.clear()
@@ -369,10 +389,14 @@ func update_game(delta: float) -> void:
 		shift_world(camera_shift)
 
 	spawn_world_if_needed()
+	update_ghosts(delta)
 	update_rockets(delta)
 	update_pickups(delta)
 	update_particles(delta)
 	check_player_block_collisions()
+	check_player_ghost_collisions()
+	if screen != Screen.GAME:
+		return
 	cleanup_world()
 
 	if player_pos.y > 1040:
@@ -389,6 +413,8 @@ func update_game(delta: float) -> void:
 func shift_world(amount: float) -> void:
 	for block in blocks:
 		block["pos"] = block["pos"] + Vector2(0, amount)
+	for ghost in ghosts:
+		ghost["pos"] = ghost["pos"] + Vector2(0, amount)
 	for rocket in rockets:
 		rocket["pos"] = rocket["pos"] + Vector2(0, amount)
 	for pickup in pickups:
@@ -432,6 +458,21 @@ func spawn_block(y_position: float) -> void:
 		pickups.append({"pos": Vector2(x + width * 0.5, y_position - 34), "vel": Vector2.ZERO, "rare": false, "value": 25})
 	elif rng.randf() < 0.055:
 		pickups.append({"pos": Vector2(x + width * 0.5, y_position - 36), "vel": Vector2.ZERO, "rare": true, "value": 150})
+	# Keep the opening safe; later rows can contain a drifting ghost above a brick.
+	if y_position < 520.0 and rng.randf() < GHOST_SPAWN_CHANCE:
+		ghosts.append({"pos": Vector2(clampf(x + width * 0.5 + rng.randf_range(-55, 55), 55, 485), y_position - 79), "vx": rng.randf_range(34, 62) * (-1.0 if rng.randf() < 0.5 else 1.0), "phase": rng.randf_range(0, TAU), "variant": rng.randi_range(0, 3)})
+
+
+func update_ghosts(delta: float) -> void:
+	for ghost in ghosts:
+		var old_phase: float = ghost["phase"]
+		ghost["phase"] = old_phase + delta * 2.2
+		var position: Vector2 = ghost["pos"]
+		position += Vector2(float(ghost["vx"]) * delta, (sin(float(ghost["phase"])) - sin(old_phase)) * 11.0)
+		if position.x < 48.0 or position.x > 492.0:
+			position.x = clampf(position.x, 48, 492)
+			ghost["vx"] = -float(ghost["vx"])
+		ghost["pos"] = position
 
 
 func update_rockets(delta: float) -> void:
@@ -447,12 +488,18 @@ func update_rockets(delta: float) -> void:
 			particles.append(make_particle(rocket["pos"] + trail_direction * 13, trail_velocity, Color("d7eef0"), rng.randf_range(4, 8), 0.42, -15))
 		var hit_index := -1
 		var rocket_rect := Rect2(rocket["pos"] - Vector2(12, 12), Vector2(24, 24))
-		for block_index in range(blocks.size() - 1, -1, -1):
-			var block = blocks[block_index]
-			if rocket_rect.intersects(Rect2(block["pos"], block["size"])):
-				hit_index = block_index
+		var hit_ghost := false
+		for ghost in ghosts:
+			if rocket["pos"].distance_to(ghost["pos"]) < 32.0:
+				hit_ghost = true
 				break
-		if hit_index >= 0:
+		if not hit_ghost:
+			for block_index in range(blocks.size() - 1, -1, -1):
+				var block = blocks[block_index]
+				if rocket_rect.intersects(Rect2(block["pos"], block["size"])):
+					hit_index = block_index
+					break
+		if hit_ghost or hit_index >= 0:
 			spawn_explosion(rocket["pos"])
 			damage_explosion(rocket["pos"], hit_index)
 			camera_shake = 1.0
@@ -475,6 +522,15 @@ func damage_explosion(position: Vector2, direct_index: int) -> void:
 			damage_block(index, direct_damage)
 		elif center.distance_to(position) <= radius:
 			damage_block(index, 1)
+	pop_ghosts_near(position, radius)
+
+
+func pop_ghosts_near(position: Vector2, radius: float) -> void:
+	for index in range(ghosts.size() - 1, -1, -1):
+		if ghosts[index]["pos"].distance_to(position) <= radius:
+			var center: Vector2 = ghosts[index]["pos"]
+			ghosts.remove_at(index)
+			spawn_ghost_pop(center)
 
 
 func damage_block(index: int, damage: int) -> void:
@@ -512,6 +568,30 @@ func check_player_block_collisions() -> void:
 			hit_timer = 0.12
 			damage_block(index, 1)
 			return
+
+
+func check_player_ghost_collisions() -> void:
+	if contact_cooldown > 0.0:
+		return
+	for ghost in ghosts:
+		var offset: Vector2 = player_pos + Vector2(0, -7) - ghost["pos"]
+		if offset.length() > 45.0:
+			continue
+		contact_cooldown = 1.25
+		hit_timer = 0.9
+		damage_flash = 0.7
+		camera_shake = 1.0
+		player_vel = Vector2(240.0 if offset.x >= 0 else -240.0, -320.0)
+		player_pos += offset.normalized() * 12.0 if offset.length() > 1.0 else Vector2(0, -12)
+		if shield_available:
+			shield_available = false
+			show_toast("SHIELD BLOCKED GHOST!")
+		else:
+			health -= 1
+			show_toast("GHOST HIT!  " + str(health) + " HP")
+			if health <= 0:
+				finish_run()
+		return
 
 
 func spawn_cash(position: Vector2, value: int) -> void:
@@ -561,6 +641,9 @@ func cleanup_world() -> void:
 	for index in range(pickups.size() - 1, -1, -1):
 		if pickups[index]["pos"].y > 1080:
 			pickups.remove_at(index)
+	for index in range(ghosts.size() - 1, -1, -1):
+		if ghosts[index]["pos"].y > 1080:
+			ghosts.remove_at(index)
 
 
 func finish_run() -> void:
@@ -598,6 +681,12 @@ func spawn_brick_burst(position: Vector2, kind: int) -> void:
 func spawn_hit_sparks(position: Vector2) -> void:
 	for i in 7:
 		particles.append(make_particle(position, Vector2(rng.randf_range(-150, 150), rng.randf_range(-170, 20)), WHITE if i % 2 == 0 else GOLD, rng.randf_range(3, 7), 0.35, 250))
+
+
+func spawn_ghost_pop(position: Vector2) -> void:
+	for i in 24:
+		var velocity := Vector2.from_angle(rng.randf_range(0, TAU)) * rng.randf_range(75, 230)
+		particles.append(make_particle(position, velocity, WHITE if i % 4 else LIME, rng.randf_range(4, 10), rng.randf_range(0.3, 0.65), -30))
 
 
 func spawn_money_burst(position: Vector2, rare: bool) -> void:
@@ -751,6 +840,32 @@ func draw_ghost_cloud(center: Vector2, scale_value: float) -> void:
 	draw_circle(Vector2(12, -3), 5.5, face)
 	draw_circle(Vector2(0, 19), 8, face)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+func draw_enemy_ghost(ghost: Dictionary) -> void:
+	var center: Vector2 = ghost["pos"] + current_shake_offset
+	var variant: int = ghost["variant"]
+	var wobble := sin(float(ghost["phase"])) * 0.08
+	var scale_value := 0.90 + float(variant % 3) * 0.07
+	draw_set_transform(center, wobble, Vector2.ONE * scale_value)
+	draw_circle(Vector2.ZERO, 35, Color(0.85, 1.0, 0.88, 0.12))
+	# Black silhouette, white puffy hands and head, and a tapering wisp tail.
+	draw_colored_polygon(PackedVector2Array([Vector2(-20, 7), Vector2(-15, 29), Vector2(-5, 38), Vector2(3, 32), Vector2(12, 36), Vector2(17, 5)]), INK)
+	draw_circle(Vector2(-23, 5), 12, INK)
+	draw_circle(Vector2(23, 4), 12, INK)
+	draw_circle(Vector2(0, -8), 25, INK)
+	draw_colored_polygon(PackedVector2Array([Vector2(-16, 5), Vector2(-11, 27), Vector2(-4, 32), Vector2(3, 26), Vector2(9, 30), Vector2(13, 5)]), WHITE)
+	draw_circle(Vector2(-23, 5), 9, WHITE)
+	draw_circle(Vector2(23, 4), 9, WHITE)
+	draw_circle(Vector2(0, -8), 22, WHITE)
+	draw_circle(Vector2(-17, -19), 8, WHITE)
+	draw_circle(Vector2(16, -19), 8, WHITE)
+	draw_circle(Vector2(-9, -15), 4.5, INK)
+	draw_circle(Vector2(9, -15), 4.5, INK)
+	draw_colored_polygon(PackedVector2Array([Vector2(-7, -1), Vector2(-5, -6), Vector2(2, -7), Vector2(7, -2), Vector2(5, 10), Vector2(0, 14), Vector2(-5, 9)]), INK)
+	draw_circle(Vector2(-19, 9), 2, Color("c8d4d5"))
+	draw_circle(Vector2(18, 8), 2, Color("c8d4d5"))
+	draw_set_transform(current_shake_offset, 0.0, Vector2.ONE)
 
 
 func draw_cloud(position: Vector2, scale_value: float) -> void:
@@ -928,6 +1043,8 @@ func draw_game() -> void:
 	draw_sky(false)
 	for block in blocks:
 		draw_brick(Rect2(block["pos"], block["size"]), int(block["kind"]), int(block["hp"]), int(block["max_hp"]))
+	for ghost in ghosts:
+		draw_enemy_ghost(ghost)
 	for pickup in pickups:
 		var bob := sin(menu_time * 7.0 + pickup["pos"].x) * 3.0
 		if bool(pickup["rare"]):
@@ -946,6 +1063,8 @@ func draw_game() -> void:
 	draw_game_hud()
 	if screen_flash > 0.0:
 		draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color(1, 0.92, 0.68, screen_flash * 0.42))
+	if damage_flash > 0.0:
+		draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color(1, 0.13, 0.18, damage_flash * 0.25))
 	if tutorial_visible:
 		draw_tutorial()
 	elif paused:
@@ -1036,8 +1155,15 @@ func draw_game_hud() -> void:
 	draw_label("BAZOOKA READY" if ready else "RELOADING", Vector2(reload_rect.position.x, reload_rect.position.y + 22), 13, LIME if ready else WHITE, HORIZONTAL_ALIGNMENT_CENTER, reload_rect.size.x, 2)
 	if not ready:
 		draw_progress(Rect2(reload_rect.position.x + 5, reload_rect.end.y - 6, reload_rect.size.x - 10, 5), 1.0 - reload_timer / 0.56)
+	draw_panel(Rect2(408, 79, 116, 35), Color(0.01, 0.07, 0.13, 0.86), Color("156795"), 2, 6)
+	for index in MAX_HEALTH:
+		var center := Vector2(429 + index * 33, 96)
+		var heart_color := RED if index < health else Color("405062")
+		draw_circle(center + Vector2(-5, -3), 6, heart_color)
+		draw_circle(center + Vector2(5, -3), 6, heart_color)
+		draw_colored_polygon(PackedVector2Array([center + Vector2(-11, -1), center + Vector2(11, -1), center + Vector2(0, 12)]), heart_color)
 	if shield_available:
-		draw_texture_rect(SHIELD_TEX, Rect2(478, 81, 44, 44), false)
+		draw_texture_rect(SHIELD_TEX, Rect2(486, 117, 30, 30), false)
 
 
 func draw_tutorial() -> void:

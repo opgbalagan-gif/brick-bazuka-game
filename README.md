@@ -32,6 +32,7 @@ godot --path .
 - The vertical world is generated continuously above the player, with brick structures positioned for downward and diagonal shots.
 - Normal, reinforced, graffiti and cash bricks have distinct behavior/appearance.
 - Rockets have directional flight, trails and explosion radius; destroyed bricks create debris and can drop cash.
+- White ghost enemies drift between brick rows. A rocket or nearby explosion pops them; touching one consumes the shield or one of three hearts, with brief invulnerability and knockback.
 - The original platform bounce is restored; bazooka recoil remains an additional trajectory-control impulse.
 - Jet Boots, Bazooka, Cash Magnet and Shield levels affect the live run.
 - Three persistent missions automatically pay rewards once their targets are reached.
