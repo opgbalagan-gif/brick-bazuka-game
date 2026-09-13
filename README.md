@@ -22,7 +22,7 @@ godot --path .
 - Aim below the hero to climb; aim down-right to recoil up-left and vice versa.
 - Space/Enter: fire straight down.
 - Pause button or Escape: pause.
-- Tap SHOP on the title screen, then tap an upgrade card to purchase levels. MISSIONS shows persistent progress.
+- The title screen has one active control: START. Its painted button launches the game.
 
 ## Gameplay systems
 

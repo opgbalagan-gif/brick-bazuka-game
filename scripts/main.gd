@@ -242,52 +242,8 @@ func handle_press(position: Vector2) -> void:
 
 
 func handle_menu_press(position: Vector2) -> void:
-	if settings_open:
-		if Rect2(95, 368, 350, 64).has_point(position):
-			sound_enabled = not sound_enabled
-			show_toast("SOUND " + ("ON" if sound_enabled else "OFF"))
-		elif Rect2(95, 448, 350, 64).has_point(position):
-			haptics_enabled = not haptics_enabled
-			show_toast("HAPTICS " + ("ON" if haptics_enabled else "OFF"))
-		elif not Rect2(70, 260, 400, 340).has_point(position):
-			settings_open = false
-		save_profile()
-		return
-	if menu_overlay != "":
-		if menu_overlay == "shop":
-			for index in upgrade_rects.size():
-				if upgrade_rects[index].has_point(position):
-					purchase_upgrade(index)
-					return
-		if menu_overlay == "daily" and Rect2(145, 540, 250, 64).has_point(position):
-			claim_daily_reward()
-		elif Rect2(120, 635, 300, 58).has_point(position) or not Rect2(60, 220, 420, 500).has_point(position):
-			menu_overlay = ""
-		return
-	if settings_rect.has_point(position):
-		settings_open = true
-		return
-	if cta_rect.has_point(position) or Rect2(212, 866, 116, 86).has_point(position):
+	if cta_rect.has_point(position):
 		start_game()
-		return
-	for index in upgrade_rects.size():
-		if upgrade_rects[index].has_point(position):
-			purchase_upgrade(index)
-			return
-	for index in nav_rects.size():
-		if nav_rects[index].has_point(position):
-			match index:
-				0:
-					menu_overlay = "shop"
-				1:
-					menu_overlay = "missions"
-				2:
-					start_game()
-				3:
-					menu_overlay = "characters"
-				4:
-					menu_overlay = "daily"
-			return
 
 
 func handle_game_press(position: Vector2) -> void:
@@ -752,20 +708,14 @@ func _draw() -> void:
 	else:
 		draw_game()
 		draw_game_over()
-	if toast_timer > 0:
+	if toast_timer > 0 and screen != Screen.MENU:
 		draw_toast()
 
 
 func draw_menu() -> void:
 	draw_texture_rect(MENU_COVER_TEX, Rect2(Vector2.ZERO, VIEW_SIZE), false)
-	draw_top_bar()
 	var pulse := 0.35 + 0.25 * sin(menu_time * 3.4)
 	draw_rect(cta_rect.grow(3), Color(0.59, 1.0, 0.13, pulse), false, 3)
-	draw_navigation()
-	if settings_open:
-		draw_settings()
-	elif menu_overlay != "":
-		draw_menu_overlay()
 
 
 func draw_sky(menu_mode: bool) -> void:
@@ -959,11 +909,6 @@ func draw_menu_overlay() -> void:
 			draw_texture_rect(HERO_TEX, Rect2(135, 310, 270, 228), false)
 			draw_panel(Rect2(138, 552, 264, 54), Color("27b73f"), LIME, 3, 8)
 			draw_label("MAIN HERO • SELECTED", Vector2(138, 588), 17, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 264, 2)
-		"leaderboard":
-			draw_label("LEADERBOARD", Vector2(60, 282), 32, GOLD, HORIZONTAL_ALIGNMENT_CENTER, 420, 4)
-			draw_rank_row(1, "YOU", maxi(best_meters, 0), 335)
-			draw_rank_row(2, "BRICK BOT", maxi(best_meters - 45, 0), 402)
-			draw_rank_row(3, "ROOFTOP KID", maxi(best_meters - 120, 0), 469)
 		"daily":
 			draw_label("DAILY REWARD", Vector2(60, 282), 32, GOLD, HORIZONTAL_ALIGNMENT_CENTER, 420, 4)
 			draw_texture_rect(CASH_TEX, Rect2(180, 330, 180, 120), false)
@@ -973,13 +918,6 @@ func draw_menu_overlay() -> void:
 			draw_label("CLAIM" if available else "CLAIMED TODAY", Vector2(145, 583), 22, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 250, 3)
 	draw_panel(Rect2(120, 635, 300, 58), Color("0b3153"), CYAN, 2, 8)
 	draw_label("BACK", Vector2(120, 674), 20, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 300, 2)
-
-
-func draw_rank_row(rank: int, name: String, meters: int, y: float) -> void:
-	draw_panel(Rect2(90, y - 30, 360, 54), Color("0b3153"), Color("156795"), 2, 7)
-	draw_label("#" + str(rank), Vector2(102, y + 7), 20, GOLD, HORIZONTAL_ALIGNMENT_LEFT, 50, 2)
-	draw_label(name, Vector2(156, y + 7), 17, WHITE, HORIZONTAL_ALIGNMENT_LEFT, 180, 2)
-	draw_label(str(meters) + " M", Vector2(330, y + 7), 16, CYAN, HORIZONTAL_ALIGNMENT_CENTER, 105, 2)
 
 
 func draw_game() -> void:

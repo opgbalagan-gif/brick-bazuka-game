@@ -6,6 +6,12 @@ func _init() -> void:
 	assert(packed != null, "Main scene must load")
 	var game = packed.instantiate()
 	root.add_child(game)
+	game.handle_menu_press(Vector2(40, 40))
+	assert(game.screen == 0, "Removed menu controls must not respond")
+	game.handle_menu_press(Vector2(270, 905))
+	assert(game.screen == 0, "The old bottom navigation must not start the game")
+	game.handle_menu_press(game.cta_rect.get_center())
+	assert(game.screen == 1, "The painted START button must launch the game")
 	game.start_game()
 	game.tutorial_visible = false
 	game.player_pos = Vector2(270, 460)
