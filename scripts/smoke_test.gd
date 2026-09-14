@@ -1,15 +1,45 @@
 extends SceneTree
 
 
+class TiltStub extends Node:
+	var axis := 0.0
+	var blocking := false
+	func start() -> void:
+		axis = 0.0
+		blocking = false
+	func stop() -> void:
+		axis = 0.0
+	func read_axis() -> float:
+		return axis
+	func needs_permission() -> bool:
+		return blocking
+
+
+func _use_tilt_stub(game) -> void:
+	game.tilt_control.free()
+	game.tilt_control = TiltStub.new()
+	game.add_child(game.tilt_control)
+
+
 func _init() -> void:
 	_run.call_deferred()
 
 
 func _run() -> void:
+	var legacy_profile := ConfigFile.new()
+	legacy_profile.set_value("progress", "money", 99999)
+	legacy_profile.set_value("progress", "upgrades", {"boots": 20, "bazooka": 20})
+	legacy_profile.set_value("progress", "cash_total", 50)
+	legacy_profile.set_value("progress", "best_meters", 123)
+	var test_profile_path := "user://brick_bazuka_smoke_save.cfg"
+	legacy_profile.save(test_profile_path)
 	var packed: PackedScene = load("res://scenes/main.tscn")
 	assert(packed != null, "Main scene must load")
 	var game = packed.instantiate()
+	game.profile_path = test_profile_path
 	root.add_child(game)
+	_use_tilt_stub(game)
+	game.leaderboard.api_url = ""
 	assert(game.background_video != null and game.background_video.loop, "Background video must be ready to loop")
 	assert(not game.background_video.is_playing(), "Title screen must not decode the game background")
 	game.handle_menu_press(Vector2(40, 40))
@@ -18,6 +48,20 @@ func _run() -> void:
 	assert(game.screen == 0, "The old bottom navigation must not start the game")
 	game.handle_menu_press(game.cta_rect.get_center())
 	assert(game.screen == 1, "The painted START button must launch the game")
+	game.start_game()
+	assert(game.best_meters == 123, "Existing height records must survive removal of currency")
+	assert(game.blocks.size() == 4, "The opening must contain four single platform rows")
+	for index in range(1, game.blocks.size()):
+		var gap: float = game.blocks[index - 1]["pos"].y - game.blocks[index]["pos"].y
+		assert(gap >= 250 and gap <= 310, "Platforms must keep the larger vertical gaps")
+	game.blocks.clear()
+	for row in 50:
+		var before: int = game.blocks.size()
+		game.spawn_block(-row * 280.0)
+		assert(game.blocks.size() == before + 1, "Each generated row must contain exactly one platform")
+		var block: Dictionary = game.blocks.back()
+		var source: Rect2 = game.PLATFORM_ART[block["skin"]]["region"]
+		assert(absf(block["size"].aspect() - source.size.aspect()) < 0.01, "Platform artwork must retain its proportions")
 	game.start_game()
 	game.tutorial_visible = false
 	game.sync_video_background()
@@ -33,8 +77,7 @@ func _run() -> void:
 	assert(game.rockets.size() == 1, "A shot must create one rocket")
 	assert(game.rockets[0]["pos"].distance_to(solution["muzzle"]) < 0.01, "Rocket must spawn at the rotating muzzle")
 	assert(game.rockets[0]["vel"].normalized().dot(expected_shot_direction) > 0.99, "Rocket must fly toward the target")
-	assert(game.player_vel.dot(expected_shot_direction) < 0, "Recoil must push opposite to the shot")
-	assert(game.player_vel.x < 0 and game.player_vel.y < 0, "Down-right shot must recoil up-left")
+	assert(game.player_vel == Vector2.ZERO, "Firing down-right must not move the hero")
 	var rocket_count: int = game.rockets.size()
 	game.launch_player(shot_target)
 	assert(game.rockets.size() == rocket_count, "Reload must block immediate shot spam")
@@ -44,18 +87,23 @@ func _run() -> void:
 	game.update_aim_target(down_target)
 	var down_solution: Dictionary = game.get_aim_solution(down_target)
 	game.launch_player(down_target)
-	assert(absf(down_solution["direction"].x) < 0.12 and game.player_vel.y < 0, "Down shot must remain mostly vertical and move up")
+	assert(absf(down_solution["direction"].x) < 0.12 and game.player_vel == Vector2.ZERO, "Downward shots must preserve player velocity")
 	game.reload_timer = 0.0
 	game.player_vel = Vector2.ZERO
 	var left_target: Vector2 = game.player_pos + Vector2(-140, 240)
 	game.update_aim_target(left_target)
 	assert(game.facing_left, "A leftward shot must turn the hero to the left")
 	game.launch_player(left_target)
-	assert(game.player_vel.x > 0 and game.player_vel.y < 0, "Down-left shot must recoil up-right")
+	assert(game.player_vel == Vector2.ZERO, "Firing down-left must not move the hero")
 
 	var smashed_before: int = game.smashed_total
 	game.damage_block(0, 99)
-	assert(game.smashed_total == smashed_before + 1, "Brick destruction must advance the mission")
+	assert(game.smashed_total == smashed_before + 1, "Brick destruction must advance the destruction count")
+	game.blocks = [{"pos": Vector2(220, 610), "size": Vector2(180, 61), "skin": 5, "kind": 1, "hp": 2, "max_hp": 2}]
+	game.damage_explosion(Vector2(240, 615), 0)
+	assert(game.blocks.size() == 1 and game.blocks[0]["hp"] == 1, "Reinforced stone must survive the first rocket with visible cracks")
+	game.damage_explosion(Vector2(240, 615), 0)
+	assert(game.blocks.is_empty(), "The second rocket must destroy reinforced stone")
 	game.blocks = [{"pos": Vector2(220, 610), "size": Vector2(120, 52), "kind": 0, "hp": 1, "max_hp": 1}]
 	game.player_pos = Vector2(270, 560)
 	game.player_vel = Vector2(0, 180)
@@ -121,19 +169,40 @@ func _run() -> void:
 	game.player_pos = Vector2(270, 460)
 	game.ghosts = [{"pos": game.player_pos + Vector2(0, -7), "vx": 0.0, "phase": 0.0, "variant": 2}]
 	game.check_player_ghost_collisions()
-	assert(not game.shield_available and game.health == 3, "Shield must absorb the first ghost touch")
+	assert(game.health == 2, "The first ghost touch must immediately remove one visible heart")
 	game.check_player_ghost_collisions()
-	assert(game.health == 3, "Contact cooldown must prevent repeated damage each frame")
+	assert(game.health == 2, "Contact cooldown must prevent repeated damage each frame")
 	game.contact_cooldown = 0.0
 	game.check_player_ghost_collisions()
-	assert(game.health == 2, "Unshielded ghost touch must remove one heart")
-	game.health = 1
+	assert(game.health == 1, "A second ghost hit must leave one heart")
 	game.contact_cooldown = 0.0
 	game.check_player_ghost_collisions()
-	assert(game.screen == 2, "Losing the last heart must end the run")
+	assert(game.health == 0 and game.screen == 2, "The third ghost hit must end the run with no hearts")
+	game.check_player_ghost_collisions()
+	assert(game.health == 0, "Finished runs must not consume extra lives")
 	game.start_game()
 	game.tutorial_visible = false
-	assert(game.health == 3 and game.shield_available, "Restart must restore hearts and shield")
+	game.height_meters = 88
+	for expected_health in [2, 1, 0]:
+		game.player_pos = Vector2(270, 1041)
+		game.player_vel = Vector2.ZERO
+		# A ghost at the fall boundary must not charge a second life in the same frame.
+		game.ghosts = [game.make_ghost(game.player_pos + Vector2(0, -7), 0.0)]
+		game.update_game(1.0 / 60.0)
+		assert(game.health == expected_health, "Each fall must consume exactly one heart, including the first")
+		assert(game.height_meters == 88, "Recovering from a fall must retain the run score")
+		if expected_health > 0:
+			assert(game.screen == 1 and game.player_pos.y < 960 and game.player_vel.y < 0, "Remaining lives must return the player to the level")
+			assert(game.contact_cooldown > 0, "Returning after a fall must give brief protection from ghosts")
+			game.ghosts = [game.make_ghost(game.player_pos + Vector2(0, -7), 0.0)]
+			game.check_player_ghost_collisions()
+			assert(game.health == expected_health, "A ghost at the return position must not remove another heart immediately")
+		else:
+			assert(game.screen == 2 and game.leaderboard.visible, "The last fall must open the leaderboard")
+	print("HEALTH_TEST_OK first_hit cooldown three_falls score_preserved final_leaderboard")
+	game.start_game()
+	game.tutorial_visible = false
+	assert(game.health == 3, "Restart must restore all three hearts")
 	assert(game.ghost_deaths.is_empty(), "Restart must clear death effects")
 	game.player_pos = Vector2(270, 550)
 	var animated_ghost: Dictionary = game.make_ghost(Vector2(270, 200), 0.0)
@@ -172,7 +241,136 @@ func _run() -> void:
 		game.update_game(1.0 / 60.0)
 	assert(game.blocks.size() > 0, "Procedural world must contain blocks")
 	assert(game.rockets.size() >= 0, "Rocket update completed")
-	assert(game.money >= 0, "Money cannot become negative")
+	_test_tilt_steering(game)
+	_test_screen_wrap(game)
+	_test_platform_jump(game)
+	_test_shots_preserve_motion(game)
 	game.save_profile()
-	print("SMOKE_TEST_OK first_controller=restored muzzle=aligned recoil=additive rotations=stable bounce=restored height=", int(game.height_meters))
+	var saved_profile := ConfigFile.new()
+	assert(saved_profile.load(test_profile_path) == OK, "Updated profile must save")
+	assert(saved_profile.get_section_keys("progress").size() == 2, "Only height and destruction count must persist as progress")
+	assert(not saved_profile.has_section_key("progress", "money") and not saved_profile.has_section_key("progress", "upgrades"), "Old currency and upgrades must be removed from saved profiles")
+	print("SMOKE_TEST_OK platforms=sparse stone=two_hits economy=removed controller=preserved animations=working height=", int(game.height_meters))
+	game.free()
+	DirAccess.remove_absolute(test_profile_path)
 	quit(0)
+
+
+func _test_tilt_steering(game) -> void:
+	game.start_game()
+	game.tutorial_visible = false
+	game.blocks.clear()
+	game.ghosts.clear()
+	game.spawn_cursor_y = -100000.0
+	game.player_pos = Vector2(270, 450)
+	game.player_vel = Vector2.ZERO
+	game.tilt_control.axis = 1.0
+	for frame in 30:
+		game._process(1.0 / 60.0)
+	assert(game.player_pos.x > 380 and game.player_vel.x > 0, "Right tilt must move the hero right")
+	game.tilt_control.axis = 0.0
+	for frame in 12:
+		game._process(1.0 / 60.0)
+	assert(is_zero_approx(game.player_vel.x), "Neutral phone position must stop horizontal drift")
+	game.tilt_control.axis = -1.0
+	for frame in 24:
+		game._process(1.0 / 60.0)
+	assert(game.player_pos.x < 350 and game.player_vel.x < 0, "Left tilt must reverse horizontal movement")
+	var position_before: Vector2 = game.player_pos
+	game.paused = true
+	game._process(0.2)
+	assert(game.player_pos == position_before, "Tilt must not move a paused game")
+	game.paused = false
+	game.tilt_control.blocking = true
+	game._process(0.2)
+	assert(game.player_pos == position_before, "Game must wait while the sensor permission dialog is open")
+	game.tilt_control.blocking = false
+	assert(game.rockets.is_empty(), "Tilting must not fire the bazooka")
+	print("TILT_GAME_TEST_OK left_right braking pause permission no_shots")
+
+
+func _test_screen_wrap(game) -> void:
+	for frames_per_second in [30, 60, 120]:
+		for direction in [-1.0, 1.0]:
+			game.start_game()
+			game.tutorial_visible = false
+			game.blocks.clear()
+			game.ghosts.clear()
+			game.spawn_cursor_y = -100000.0
+			game.player_pos = Vector2(1 if direction < 0 else 539, 500)
+			game.player_vel = Vector2(direction * game.STEERING_SPEED, -100)
+			game.tilt_control.axis = direction
+			var delta := 1.0 / float(frames_per_second)
+			game.update_game(delta)
+			if direction < 0:
+				assert(game.player_pos.x > 529 and game.player_pos.x < 540, "Leaving the left edge must enter from the right")
+			else:
+				assert(game.player_pos.x > 0 and game.player_pos.x < 11, "Leaving the right edge must enter from the left")
+			assert(is_equal_approx(game.player_vel.x, direction * game.STEERING_SPEED), "Wrapping must preserve horizontal speed and direction")
+			var expected_vertical_speed: float = -100 + game.PLAYER_GRAVITY * delta
+			assert(is_equal_approx(game.player_vel.y, expected_vertical_speed), "Wrapping must preserve the jump")
+			assert(is_equal_approx(game.player_pos.y, 500 + expected_vertical_speed * delta), "Wrapping must not teleport vertically")
+			assert(game.health == 3 and is_zero_approx(game.height_meters), "Crossing a side must not cost a life or award height")
+	print("SCREEN_WRAP_TEST_OK both_directions fps_30_60_120 velocity_jump_health_preserved")
+
+
+func _test_platform_jump(game) -> void:
+	for frames_per_second in [30, 60, 120]:
+		for gap in [game.BLOCK_GAP_MIN, (game.BLOCK_GAP_MIN + game.BLOCK_GAP_MAX) * 0.5, game.BLOCK_GAP_MAX]:
+			game.start_game()
+			game.tutorial_visible = false
+			game.ghosts.clear()
+			game.spawn_cursor_y = -100000.0
+			var next_platform := {"pos": Vector2(170, 760 - gap), "size": Vector2(200, 60), "skin": 5, "kind": 1, "hp": 2, "max_hp": 2}
+			game.blocks = [
+				{"pos": Vector2(170, 760), "size": Vector2(200, 60), "skin": 0, "kind": 0, "hp": 1, "max_hp": 1},
+				next_platform
+			]
+			game.player_pos = Vector2(270, 700)
+			game.player_vel = Vector2(0, 180)
+			var cleared_next_platform := false
+			var landed_on_next_platform := false
+			for frame in frames_per_second * 4:
+				game._process(1.0 / frames_per_second)
+				if game.player_pos.y + 68 < next_platform["pos"].y:
+					cleared_next_platform = true
+				if next_platform["hp"] == 1:
+					landed_on_next_platform = true
+					break
+			assert(cleared_next_platform, "Platform jump must clear the next surface at every generated vertical gap")
+			assert(landed_on_next_platform and game.player_vel.y < 0, "Hero must land on and bounce from the next platform")
+			assert(game.health == 3 and game.rockets.is_empty(), "Reaching the next platform must need no shots or lost lives")
+	print("PLATFORM_JUMP_TEST_OK gaps_250_280_310 fps_30_60_120 landing_without_shots")
+
+
+func _test_shots_preserve_motion(game) -> void:
+	var control = load("res://scenes/main.tscn").instantiate()
+	control.profile_path = "user://weapon_motion_control.cfg"
+	root.add_child(control)
+	_use_tilt_stub(control)
+	control.leaderboard.api_url = ""
+	for velocity in [Vector2.ZERO, Vector2(120, 650), Vector2(-170, -400)]:
+		for aim_offset in [Vector2(0, -240), Vector2(-200, 0), Vector2(200, 0), Vector2(140, -220), Vector2(0, 240)]:
+			for world in [game, control]:
+				world.start_game()
+				world.tutorial_visible = false
+				world.blocks.clear()
+				world.ghosts.clear()
+				world.spawn_cursor_y = -100000.0
+				world.player_pos = Vector2(270, 650)
+				world.player_vel = velocity
+			var target: Vector2 = game.player_pos + aim_offset
+			var expected_direction: Vector2 = game.get_aim_solution(target)["direction"]
+			game.begin_aim(target)
+			game.end_aim(target)
+			assert(game.player_vel == velocity and game.player_pos == control.player_pos, "Shots in every direction must preserve position and velocity")
+			assert(game.rockets.size() == 1 and game.rockets[0]["vel"].normalized().dot(expected_direction) > 0.99, "Rockets must still follow the aim point")
+			var velocity_after_shot: Vector2 = game.player_vel
+			game.launch_player(target)
+			assert(game.player_vel == velocity_after_shot and game.rockets.size() == 1, "Reload must prevent extra rockets without changing movement")
+			for frame in 18:
+				game._process(1.0 / 60.0)
+				control._process(1.0 / 60.0)
+			assert(game.player_pos.is_equal_approx(control.player_pos) and game.player_vel.is_equal_approx(control.player_vel), "Firing and not firing must produce the same trajectory")
+	control.free()
+	print("WEAPON_MOTION_TEST_OK no_impulse all_directions falling rising trajectory reload")

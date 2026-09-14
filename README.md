@@ -1,6 +1,6 @@
 # BRICK BAZUKA
 
-Vertical 9:16 arcade prototype for Godot 4. The bazooka is both the weapon and the movement system: aim, shoot, recoil, fly, smash bricks and collect cash.
+Vertical 9:16 arcade prototype for Godot 4. Bounce on brick platforms and use the bazooka to shoot ghosts.
 
 ## Play online
 
@@ -16,33 +16,42 @@ godot --path .
 
 ## Controls
 
+- Tilt the phone left/right to steer. Each run calibrates its initial position as neutral; a 3-degree dead zone filters hand tremors. Screen rotation and returning from a hidden tab recalibrate the Web sensor.
+- On iPhone, tap **ВКЛЮЧИТЬ НАКЛОН** and allow motion/orientation access. Play waits while this dialog is open. Sensor access requires HTTPS (or localhost on the same device); a plain HTTP LAN address will offer touch arrows instead. Denied or unavailable sensors also have touch-arrow controls.
+- On desktop, use **←/→** or **A/D** to move. Touch/mouse aiming and shooting remain independent of movement.
 - Hold touch/mouse, drag to aim, and release over a point or brick to fire.
 - The bazooka aims faster than the body; the body smoothly leans toward the same shot direction.
-- The rocket spawns from the rotating muzzle and recoil pushes the hero in the opposite direction.
-- Aim below the hero to climb; aim down-right to recoil up-left and vice versa.
+- The rocket spawns from the rotating muzzle and flies toward the aim point. Shooting does not change the hero's position, velocity or trajectory in any direction.
 - Space/Enter: fire straight down.
-- Pause button or Escape: pause.
+- Escape: pause.
 - The title screen has one active control: START. Its painted button launches the game.
+- Before the first shot, the supplied white glove points down and loops a tap gesture without text. The first touch dismisses the hint and starts aiming.
 
 ## Gameplay systems
 
-- The restored assisted controller supplies the original tap boost, horizontal correction, gravity, air drag and platform bounce.
-- Bazooka recoil is additive (`velocity += -shot_direction * recoil_force`) and never replaces existing velocity.
+- Tilt/keyboard steering controls horizontal movement with smooth acceleration and braking. Gravity and platform bounces control vertical movement. Shots apply no jump impulse, horizontal correction or recoil to the hero; only the weapon plays a firing animation.
+- Crossing either side of the screen brings the hero in from the opposite side, preserving speed and the current jump without losing a heart.
 - Physics/collision stays axis-aligned; only the character and weapon visual layers rotate.
 - The vertical world is generated continuously above the player, with brick structures positioned for downward and diagonal shots.
-- Normal, reinforced, graffiti and cash bricks have distinct behavior/appearance.
-- Rockets have directional flight, trails and explosion radius; destroyed bricks create debris and can drop cash.
+- Single platforms are spaced 250–310 pixels apart, leaving roughly 3–4 visible at once. Brown brick, stone, cracked and slime-covered variants use the supplied artwork.
+- Rockets have directional flight, trails and explosion radius; destroyed bricks create debris. Reinforced stone takes two hits and cracks after the first.
 - Ghost enemies use the supplied videos as transparent animated sprites: calm while distant, angry within 200 pixels of the hero, and calm again beyond 250 pixels. The gap keeps their expressions from flickering at the boundary.
-- A rocket or nearby explosion removes the ghost's collision immediately and plays the supplied death animation once. Touching a live ghost consumes the shield or one of three hearts, with brief invulnerability and knockback.
+- A rocket or nearby explosion removes the ghost's collision immediately and plays the supplied death animation once. Touching a live ghost consumes one of three hearts from the first hit, with brief invulnerability and knockback.
+- Falling below the screen also consumes one heart. If hearts remain, the hero returns to the level with a short upward bounce and protection from ghosts; the height score is retained. Losing the third heart ends the run and opens the leaderboard.
 - The supplied night-city video loops behind the level at 540×960, 24 FPS. Pausing freezes the video and ghost animations; returning to START stops the video.
-- The original platform bounce is restored; bazooka recoil remains an additional trajectory-control impulse.
-- Jet Boots, Bazooka, Cash Magnet and Shield levels affect the live run.
-- Three persistent missions automatically pay rewards once their targets are reached.
-- Money, upgrade levels, mission progress, best height, daily reward and settings save to `user://brick_bazuka_save.cfg`.
+- The HUD shows only the run's numeric height score at the top, using white bubble-letter digits with a black outline. Three hearts sit at the bottom center; transient messages appear above them.
+- Landing on a platform produces a jump sized for the maximum 310-pixel platform gap plus 60 pixels of clearance. Firing cannot boost or redirect it.
+- Movement and weapon strength are fixed. The game has no currency, collectible money, paid upgrades or cash rewards.
+- Best height, destroyed-platform count and settings save to `user://brick_bazuka_save.cfg`. Old currency and upgrade fields are ignored on load and removed on the next save.
+- At the end of a run, players enter a name and publish their score to a shared top-10 leaderboard. The name is remembered for the next attempt; repeat submissions do not duplicate a run. Scores use a separate private Google Sheet on the existing SOLLERS Apps Script service. Setup and API: [server/google-sheets/README.md](server/google-sheets/README.md).
 
 ## Asset layout
 
-Project art lives in `assets/ui`, `assets/characters`, `assets/weapons`, `assets/blocks`, `assets/pickups`, `assets/effects` and `assets/backgrounds`. The title image is used directly as the interactive cover. `assets/backgrounds/night_city_loop.ogv` is the in-game video, with a matching poster while the first frame loads. Dynamic blocks, currency, rockets, shields and effects are editable SVGs; the transparent in-game hero and separately rotating bazooka remain independent layers.
+Project art lives in `assets/ui`, `assets/characters`, `assets/weapons`, `assets/blocks`, `assets/effects` and `assets/backgrounds`. The title image is used directly as the interactive cover. `assets/backgrounds/night_city_loop.ogv` is the in-game video, with a matching poster while the first frame loads. The transparent in-game hero and separately rotating bazooka remain independent layers. Unused legacy currency artwork is excluded from Web exports.
+
+The three `assets/blocks/reference_*.png` sheets are unchanged copies of the supplied platform artwork. `PLATFORM_ART` in `scripts/main.gd` selects 13 regions at their original proportions; `assets/blocks/platform_key.gdshader` removes their magenta background and edge spill at draw time.
+
+`assets/ui/tap_glove_down.png` preserves the supplied glove, rotated 180° with its checkerboard background removed. `tools/prepare_tap_glove.ps1 -Source <original.jpg>` prepares the transparent sprite locally without redrawing it.
 
 `assets/characters/ghost/animations.tres` shares three RGBA atlases between enemies, with independent playback times. The 149 frames were extracted from the supplied MP4 clips at 24 FPS, keyed before downscaling to preserve outlines, and cleaned of magenta edge spill. Rebuild the assets from the original BAZOOKA folder with Python and FFmpeg:
 
@@ -52,8 +61,13 @@ python tools/prepare_video_assets.py --ffmpeg <ffmpeg.exe> --source-dir <BAZOOKA
 
 The originals are not modified. The preparation script requires FFmpeg with the PNG and Theora encoders; the game itself needs no Python or FFmpeg.
 
+After each Web export, run `python tools/version_web_build.py`. This adds the pack's content hash to its URL so browsers load the rebuilt game instead of an older cached version.
+
+The same step installs and versions `web/tilt-control.js` in the Web build before Godot starts. The bridge handles browser sensor permission, calibration and touch fallbacks; `scripts/tilt_control.gd` reads its axis and supplies keyboard/native sensor input. Orientation data stays on the device. Browser permission reference: [MDN DeviceOrientationEvent.requestPermission](https://developer.mozilla.org/en-US/docs/Web/API/DeviceOrientationEvent/requestPermission).
+
 ## Smoke test
 
 ```powershell
 godot --headless --path . --script res://scripts/smoke_test.gd
+node scripts/test_tilt.mjs
 ```
