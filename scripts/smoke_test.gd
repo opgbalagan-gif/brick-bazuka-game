@@ -256,7 +256,8 @@ func _run() -> void:
 	_test_screen_wrap(game)
 	_test_moving_platforms(game)
 	_test_platform_jump(game)
-	_test_spring_boost(game)
+	_test_single_spring_jump(game)
+	_test_spring_rarity(game)
 	_test_fast_ghost_death(game)
 	_test_rockets_ignore_platforms(game)
 	_test_shots_preserve_motion(game)
@@ -381,7 +382,7 @@ func _test_moving_platforms(game) -> void:
 	game.player_pos = Vector2(375, 550)
 	game.player_vel = Vector2(0, 180)
 	game.check_player_block_collisions()
-	assert(game.spring_boost_timer == 8.0 and not moving_spring["spring"], "Spring collisions must follow the moving artwork")
+	assert(is_equal_approx(game.player_vel.y, -game.SPRING_BOUNCE_SPEED) and not moving_spring["spring"], "Spring collisions must follow the moving artwork")
 	game.ghosts.clear()
 	var impact: Vector2 = moving_spring["pos"] + moving_spring["size"] * 0.5
 	game.rockets = [{"pos": impact, "vel": Vector2.ZERO, "life": 1.0, "trail": 0.0}]
@@ -424,7 +425,7 @@ func _spring_test_platform(has_spring: bool = true) -> Dictionary:
 	return {"pos": Vector2(150, 700), "size": Vector2(240, 65), "skin": 5, "kind": 1, "hp": 2, "max_hp": 2, "spring": has_spring}
 
 
-func _test_spring_boost(game) -> void:
+func _test_single_spring_jump(game) -> void:
 	game.start_game()
 	assert(game.blocks[2]["spring"], "A spring must be discoverable on the third opening platform")
 	var last_spring_row := -1
@@ -449,56 +450,91 @@ func _test_spring_boost(game) -> void:
 		game.player_pos = Vector2(270, 600)
 		game.player_vel = Vector2(0, -100)
 		game.check_player_block_collisions()
-		assert(game.spring_boost_timer == 0.0 and spring_platform["spring"], "Passing upwards through a spring must not activate it")
+		assert(game.player_vel.y == -100 and spring_platform["spring"], "Passing upwards through a spring must not activate it")
 		game.player_pos = Vector2(170, 600)
 		game.player_vel.y = 180
 		game.check_player_block_collisions()
-		assert(game.spring_boost_timer == 0.0, "Missing the spring horizontally must not collect it")
+		assert(game.player_vel.y == 180 and spring_platform["spring"], "Missing the spring horizontally must not collect it")
 		game.player_pos = Vector2(270, 590)
 		game.player_vel.y = 180
+		var position_before: Vector2 = game.player_pos
+		game.paused = true
+		game._process(1.0)
+		assert(game.player_pos == position_before and spring_platform["spring"], "Pause must preserve the uncollected spring and jump state")
+		game.paused = false
+		game.tilt_control.blocking = true
+		game._process(1.0)
+		assert(game.player_pos == position_before and spring_platform["spring"], "Sensor permission must not collect the spring")
+		game.tilt_control.blocking = false
 		for frame in frames_per_second:
 			game._process(1.0 / frames_per_second)
-			if game.spring_boost_timer > 0.0:
+			if not spring_platform["spring"]:
 				break
-		assert(game.spring_boost_timer == 8.0 and not spring_platform["spring"], "Landing must consume the spring and grant eight seconds of boost")
+		assert(not spring_platform["spring"], "Landing must consume the spring immediately")
 		assert(game.player_vel.y < -1000 and game.health == 3, "Spring contact must launch the hero immediately without damage")
 		var takeoff_y: float = game.player_pos.y
+		var height_before: float = game.height_meters
+		var launch_velocity: Vector2 = game.player_vel
+		game.paused = true
+		game._process(1.0)
+		assert(game.player_vel == launch_velocity and is_equal_approx(game.player_pos.y, takeoff_y), "Pause must freeze the actual spring jump")
+		game.paused = false
 		game.blocks.clear()
 		for frame in frames_per_second * 2:
 			game._process(1.0 / frames_per_second)
 			if game.player_vel.y >= 0.0:
 				break
-		var rise: float = takeoff_y - game.player_pos.y + game.height_meters / 0.19
+		var rise: float = takeoff_y - game.player_pos.y + (game.height_meters - height_before) / 0.19
 		assert(rise > 700 and rise < 750, "A spring jump must actually rise about twice the normal 370 pixels at every frame rate")
+		game.blocks = [spring_platform]
+		game.player_pos = Vector2(270, spring_platform["pos"].y - 50)
+		game.player_vel = Vector2(0, 180)
+		game.check_player_block_collisions()
+		assert(game.blocks.is_empty() and is_equal_approx(game.player_vel.y, -game.PLATFORM_BOUNCE_SPEED), "Landing again on the consumed spring's stone platform must give only a normal bounce")
 		game.blocks = [_spring_test_platform(false)]
 		game.player_pos = Vector2(270, 650)
 		game.player_vel = Vector2(0, 180)
 		game.check_player_block_collisions()
-		assert(game.player_vel.y < -1000, "The boost must strengthen later jumps from ordinary platforms too")
-		var timer_before: float = game.spring_boost_timer
-		game.paused = true
-		game._process(1.0)
-		assert(game.spring_boost_timer == timer_before, "Pausing must preserve the remaining boost")
-		game.paused = false
-		game.tilt_control.blocking = true
-		game._process(1.0)
-		assert(game.spring_boost_timer == timer_before, "Sensor permission must not consume the boost")
-		game.tilt_control.blocking = false
+		assert(is_equal_approx(game.player_vel.y, -game.PLATFORM_BOUNCE_SPEED), "Every subsequent ordinary platform must give a normal jump")
 		game.blocks = [_spring_test_platform()]
 		game.player_pos = Vector2(270, 600)
 		game.player_vel.y = 180
 		game.check_player_block_collisions()
-		assert(game.spring_boost_timer == 8.0, "Another spring must refresh the duration without stacking strength or time")
-		game.spring_boost_timer = 0.01
+		assert(is_equal_approx(game.player_vel.y, -game.SPRING_BOUNCE_SPEED) and not game.blocks[0]["spring"], "A fresh spring must give another single high jump without stacking strength")
 		game.blocks = [_spring_test_platform(false)]
 		game.player_pos = Vector2(270, 650)
 		game.player_vel = Vector2(0, 180)
 		game.update_game(0.02)
-		assert(game.spring_boost_timer == 0.0 and is_equal_approx(game.player_vel.y, -game.PLATFORM_BOUNCE_SPEED), "After expiry, the next platform must give the normal jump")
-	game.spring_boost_timer = 6.0
+		assert(is_equal_approx(game.player_vel.y, -game.PLATFORM_BOUNCE_SPEED), "Even immediately after a spring, an ordinary platform must give the normal jump")
 	game.start_game()
-	assert(game.spring_boost_timer == 0.0, "Restarting must clear the previous run's boost")
-	print("SPRING_TEST_OK recurring_spawns contact double_height later_jumps expiry pause refresh restart fps_30_60_120")
+	assert(game.blocks[2]["spring"], "Restart must restore the opening spring")
+	print("SPRING_TEST_OK single_use double_height normal_followup consumed_platform pause fresh_spring restart fps_30_60_120")
+
+
+func _test_spring_rarity(game) -> void:
+	var previous_count := 1000
+	for scenario in [[0, 5, 7], [500, 7, 9], [1000, 9, 11], [3000, 17, 19]]:
+		game.start_game()
+		game.rng.seed = 529
+		game.height_meters = scenario[0]
+		game.platforms_until_spring = 0
+		var count := 0
+		var last_row := -1
+		for row in 240:
+			game.blocks.clear()
+			game.ghosts.clear()
+			game.spawn_block(-100)
+			if game.blocks.back()["spring"]:
+				assert(game.ghosts.is_empty() and game.blocks.size() == 1, "Rarer spring rows must remain free of ghosts and decoys")
+				if last_row >= 0:
+					assert(row - last_row >= scenario[1] and row - last_row <= scenario[2], "Spring gaps must grow with the run's height")
+				last_row = row
+				count += 1
+		assert(count > 0 and count < previous_count, "Higher sections must have fewer springs without removing them entirely")
+		previous_count = count
+	game.start_game()
+	assert(game.height_meters == 0 and game.blocks[2]["spring"] and game.platforms_until_spring <= 6, "Restart must reset spring rarity for the new run")
+	print("SPRING_RARITY_TEST_OK heights_0_500_1000_3000 fewer_pickups safe_rows reset")
 
 
 func _test_fast_ghost_death(game) -> void:
@@ -543,7 +579,7 @@ func _test_rockets_ignore_platforms(game) -> void:
 			assert(game.rockets.is_empty() and game.ghosts.size() == 1 and game.ghost_deaths.size() == 1, "A rocket must pass through intervening platforms and kill the ghost beyond them")
 			assert(game.ghosts[0]["pos"] == Vector2(450, 300), "Distant ghosts must survive the impact")
 			assert(game.blocks == platforms_before and game.smashed_total == smashed_before, "An explosion inside a platform must leave all blocks and springs intact")
-			assert(game.health == 3 and game.spring_boost_timer == 0.0, "Rockets must not damage the hero or activate springs")
+			assert(game.health == 3, "Rockets must not damage the hero")
 	print("ROCKET_TARGETS_TEST_OK pass_through_all_blocks springs_safe ghosts_hit blast_safe expiry fps_30_60_120")
 
 

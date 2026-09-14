@@ -68,11 +68,20 @@ func fake_block(position: Vector2) -> Dictionary:
 
 func test_contacts(game) -> void:
 	for frames_per_second in [30, 60, 120]:
-		for boosted in [false, true]:
+		for after_spring in [false, true]:
 			game.start_game()
 			game.tutorial_visible = false
 			game.ghosts.clear()
 			game.spawn_cursor_y = -100000.0
+			if after_spring:
+				var spring := fake_block(Vector2(220, 700))
+				spring["fake"] = false
+				spring["spring"] = true
+				game.blocks = [spring]
+				game.player_pos = Vector2(270, 600)
+				game.player_vel = Vector2(0, 180)
+				game.check_player_block_collisions()
+				assert(game.player_vel.y < -1000, "Set up a real spring jump before returning to the decoy")
 			game.particles.clear()
 			var decoy := fake_block(Vector2(220, 700))
 			var safe := {"pos": Vector2(205, 820), "size": Vector2(130, 44), "skin": 5, "kind": 1, "hp": 2, "max_hp": 2, "spring": false}
@@ -81,7 +90,6 @@ func test_contacts(game) -> void:
 			game.player_vel = Vector2(35, -180)
 			game.check_player_block_collisions()
 			assert(game.blocks.has(decoy), "Passing upward through a decoy must not break it")
-			game.spring_boost_timer = 5.0 if boosted else 0.0
 			game.player_vel = Vector2(35, 180)
 			var position_before: Vector2 = game.player_pos
 			var velocity_before: Vector2 = game.player_vel
@@ -100,8 +108,7 @@ func test_contacts(game) -> void:
 				if safe["hp"] == 1:
 					break
 			assert(safe["hp"] == 1 and game.player_vel.y < 0 and game.health == 3, "The hero must fall through a decoy and still land on a lower safe platform")
-			if boosted:
-				assert(game.player_vel.y < -1000, "The fake must not consume the boost for the next safe landing")
+			assert(is_equal_approx(game.player_vel.y, -game.PLATFORM_BOUNCE_SPEED), "The safe landing after a decoy must give a normal jump, even following a spring")
 	game.particles.clear()
 	game.spawn_fake_crumble(Rect2(200, 400, 100, 40))
 	game.update_particles(1.0)

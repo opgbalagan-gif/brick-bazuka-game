@@ -12,7 +12,7 @@ const PLATFORM_SPEED_MAX := 60.0
 const PLAYER_GRAVITY := 690.0
 const PLATFORM_JUMP_HEIGHT := BLOCK_GAP_MAX + 60.0
 const PLATFORM_BOUNCE_SPEED := sqrt(2.0 * PLAYER_GRAVITY * PLATFORM_JUMP_HEIGHT)
-const SPRING_BOOST_DURATION := 8.0
+const SPRING_RARITY_HEIGHT_STEP := 500.0
 const SPRING_BOUNCE_SPEED := sqrt(2.0 * PLAYER_GRAVITY * PLATFORM_JUMP_HEIGHT * 2.0)
 const SPRING_SIZE := Vector2(60, 48)
 const STEERING_SPEED := 320.0
@@ -116,7 +116,6 @@ var hit_timer := 0.0
 var contact_cooldown := 0.0
 var damage_flash := 0.0
 var health := MAX_HEALTH
-var spring_boost_timer := 0.0
 var platforms_until_spring := 2
 var platforms_until_fake := 4
 var hero_body_polygon := PackedVector2Array()
@@ -375,7 +374,6 @@ func start_game() -> void:
 	contact_cooldown = 0.0
 	damage_flash = 0.0
 	health = MAX_HEALTH
-	spring_boost_timer = 0.0
 	platforms_until_spring = 2
 	platforms_until_fake = 4
 	weapon_kick = 0.0
@@ -451,7 +449,6 @@ func launch_player(_tap_position: Vector2 = Vector2.ZERO) -> void:
 
 
 func update_game(delta: float) -> void:
-	spring_boost_timer = maxf(0.0, spring_boost_timer - delta)
 	player_vel.y += PLAYER_GRAVITY * delta
 	player_vel.x = move_toward(player_vel.x, tilt_control.read_axis() * STEERING_SPEED, STEERING_ACCELERATION * delta)
 	player_pos += player_vel * delta
@@ -515,7 +512,8 @@ func spawn_block(y_position: float) -> void:
 		width = rng.randf_range(135, 160)
 	var size := Vector2(width, width * region.size.y / region.size.x)
 	var has_spring := platforms_until_spring <= 0
-	platforms_until_spring = rng.randi_range(4, 6) if has_spring else platforms_until_spring - 1
+	var extra_spring_rows := floori(maxf(height_meters, 0.0) / SPRING_RARITY_HEIGHT_STEP) * 2
+	platforms_until_spring = rng.randi_range(4, 6) + extra_spring_rows if has_spring else platforms_until_spring - 1
 	# Decoys supplement the climbable route; they never replace a safe row.
 	var has_fake := platforms_until_fake <= 0 and not has_spring
 	platforms_until_fake = rng.randi_range(2, 4) if has_fake else maxi(0, platforms_until_fake - 1)
@@ -703,7 +701,6 @@ func check_player_block_collisions() -> void:
 			var spring := spring_rect(block)
 			if feet.intersects(spring) and player_pos.y < spring.position.y + 16:
 				block["spring"] = false
-				spring_boost_timer = SPRING_BOOST_DURATION
 				player_pos.y = spring.position.y - 48
 				player_vel.y = -SPRING_BOUNCE_SPEED
 				show_toast("СУПЕРПРЫЖОК!")
@@ -711,7 +708,7 @@ func check_player_block_collisions() -> void:
 				return
 		if feet.intersects(block_rect) and player_pos.y < block_rect.position.y + 16:
 			player_pos.y = block_rect.position.y - 48
-			player_vel.y = -SPRING_BOUNCE_SPEED if spring_boost_timer > 0.0 else -PLATFORM_BOUNCE_SPEED
+			player_vel.y = -PLATFORM_BOUNCE_SPEED
 			hit_timer = 0.12
 			damage_block(index, 1)
 			return
@@ -966,10 +963,6 @@ func draw_player() -> void:
 
 func draw_game_hud() -> void:
 	draw_score_counter()
-	if spring_boost_timer > 0.0:
-		draw_texture_rect(SPRING_TEX, Rect2(204, 127, 30, 24), false)
-		draw_rect(Rect2(244, 132, 92, 14), INK)
-		draw_rect(Rect2(247, 135, 86 * spring_boost_timer / SPRING_BOOST_DURATION, 8), LIME)
 	for index in MAX_HEALTH:
 		var center := Vector2(VIEW_SIZE.x * 0.5 + (index - (MAX_HEALTH - 1) * 0.5) * 46, VIEW_SIZE.y - 43)
 		var heart_color := RED if index < health else Color("405062")
