@@ -121,6 +121,8 @@ const silent = browser();
 silent.input.start(); silent.timeout();
 assert.equal(silent.input.get_status(), 'unavailable', 'No sensor events must offer fallback controls');
 const desktop = browser({mobile: false});
+assert.equal(desktop.input.is_mobile(), false, 'Desktop builds must select the keyboard tutorial');
+assert.equal(android.input.is_mobile(), true, 'Phones must retain the touch tutorial');
 desktop.input.start(); desktop.timeout();
 assert.equal(desktop.input.needs_permission(), false, 'Desktop keyboard play must never be blocked by sensor prompts');
 assert.equal(desktop.elements.get('brick-tilt-left').style.display, 'none');

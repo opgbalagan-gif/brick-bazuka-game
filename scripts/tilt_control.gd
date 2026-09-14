@@ -25,10 +25,17 @@ func needs_permission() -> bool:
 	return web_input != null and bool(web_input.needs_permission())
 
 
+func uses_keyboard() -> bool:
+	if web_input != null:
+		return not bool(web_input.is_mobile())
+	return not (OS.has_feature("android") or OS.has_feature("ios"))
+
+
 func read_axis() -> float:
-	var keyboard := float(Input.is_physical_key_pressed(KEY_RIGHT) or Input.is_physical_key_pressed(KEY_D)) - float(Input.is_physical_key_pressed(KEY_LEFT) or Input.is_physical_key_pressed(KEY_A))
-	if not is_zero_approx(keyboard):
-		return keyboard
+	var right := Input.is_physical_key_pressed(KEY_RIGHT) or Input.is_physical_key_pressed(KEY_D)
+	var left := Input.is_physical_key_pressed(KEY_LEFT) or Input.is_physical_key_pressed(KEY_A)
+	if right or left:
+		return float(right) - float(left)
 	if web_input != null:
 		return clampf(float(web_input.read_axis()), -1.0, 1.0)
 	if OS.has_feature("android") or OS.has_feature("ios"):

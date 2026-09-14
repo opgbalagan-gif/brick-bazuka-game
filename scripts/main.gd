@@ -282,9 +282,19 @@ func _unhandled_input(event: InputEvent) -> void:
 		update_aim_target(event.position)
 		return
 	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_SPACE or event.keycode == KEY_ENTER:
-			handle_press(player_pos + Vector2(0, 260) if screen == Screen.GAME else Vector2(270, 760))
-		elif event.keycode == KEY_ESCAPE:
+		var key: int = event.physical_keycode if event.physical_keycode != 0 else event.keycode
+		if key in [KEY_LEFT, KEY_RIGHT, KEY_A, KEY_D]:
+			if screen == Screen.GAME and not paused:
+				tutorial_visible = false
+		elif key == KEY_SPACE or key == KEY_ENTER:
+			if screen == Screen.MENU:
+				start_game()
+			elif screen == Screen.GAME:
+				if paused:
+					paused = false
+				else:
+					handle_game_press(player_pos + Vector2(0, 260))
+		elif key == KEY_ESCAPE:
 			if screen == Screen.GAME:
 				aiming = false
 				paused = not paused
@@ -822,6 +832,16 @@ func draw_menu() -> void:
 	draw_texture_rect(MENU_COVER_TEX, Rect2(Vector2.ZERO, VIEW_SIZE), false)
 	var pulse := 0.35 + 0.25 * sin(menu_time * 3.4)
 	draw_rect(cta_rect.grow(3), Color(0.59, 1.0, 0.13, pulse), false, 3)
+	if tilt_control.uses_keyboard():
+		draw_keyboard_help(852.0, true)
+
+
+func draw_keyboard_help(top: float, show_start: bool = false) -> void:
+	draw_panel(Rect2(40, top, 460, 88), Color(0.02, 0.07, 0.12, 0.94), CYAN, 2, 10)
+	draw_label("СТРЕЛКИ / A D — ДВИЖЕНИЕ", Vector2(40, top + 28), 19, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 460, 1)
+	draw_label("ПРОБЕЛ — ВЫСТРЕЛ   ·   ESC — ПАУЗА", Vector2(40, top + 53), 16, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 460, 1)
+	var hint := "ENTER — НАЧАТЬ" if show_start else "ПРЫЖОК ОТ ПЛАТФОРМЫ — АВТОМАТИЧЕСКИ"
+	draw_label(hint, Vector2(40, top + 75), 13, PALE_CYAN, HORIZONTAL_ALIGNMENT_CENTER, 460, 1)
 
 
 func draw_enemy_ghost(ghost: Dictionary) -> void:
@@ -963,6 +983,9 @@ func draw_score_counter() -> void:
 
 func draw_tutorial() -> void:
 	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color(0, 0, 0, 0.18))
+	if tilt_control.uses_keyboard():
+		draw_keyboard_help(735.0)
+		return
 	var phase := fmod(tutorial_time, 1.65) / 1.65
 	var press := smoothstep(0.10, 0.40, phase) * (1.0 - smoothstep(0.52, 0.84, phase))
 	var tap_point := Vector2(270, 849)

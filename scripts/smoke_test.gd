@@ -13,6 +13,8 @@ class TiltStub extends Node:
 		return axis
 	func needs_permission() -> bool:
 		return blocking
+	func uses_keyboard() -> bool:
+		return true
 
 
 func _use_tilt_stub(game) -> void:

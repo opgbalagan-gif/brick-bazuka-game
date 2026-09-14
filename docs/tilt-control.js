@@ -195,6 +195,7 @@
     },
     read_axis() { return active && !document.hidden && !panelOpen ? buttonAxis || axis : 0; },
     needs_permission() { return active && mobile && panelOpen; },
+    is_mobile() { return mobile; },
     get_status() { return status; }
   };
 })();
