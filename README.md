@@ -35,6 +35,7 @@ godot --path .
 - Physics/collision stays axis-aligned; only the character and weapon visual layers rotate.
 - The vertical world is generated continuously above the player, with brick structures positioned for downward and diagonal shots.
 - Single platforms are spaced 250–310 pixels apart, leaving roughly 3–4 visible at once. Brown brick, stone, cracked and slime-covered variants use the supplied artwork.
+- All generated platforms glide left and right with smooth turns, independent phases, 50–110 pixels of travel each way and peak speeds of 35–60 pixels per second. They stay fully inside the screen. Springs and collision areas follow the platforms; pausing, the introductory hint and sensor permission freeze their motion. The first platform begins under the hero.
 - Rockets have directional flight, trails and explosion radius; destroyed bricks create debris. Reinforced stone takes two hits and cracks after the first.
 - Ghost enemies use the supplied videos as transparent animated sprites: calm while distant, angry within 200 pixels of the hero, and calm again beyond 250 pixels. The gap keeps their expressions from flickering at the boundary.
 - A rocket or nearby explosion removes the ghost's collision immediately and plays the supplied death animation once. Touching a live ghost consumes one of three hearts from the first hit, with brief invulnerability and knockback.

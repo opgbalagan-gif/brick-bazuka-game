@@ -245,6 +245,7 @@ func _run() -> void:
 	assert(game.rockets.size() >= 0, "Rocket update completed")
 	_test_tilt_steering(game)
 	_test_screen_wrap(game)
+	_test_moving_platforms(game)
 	_test_platform_jump(game)
 	_test_spring_boost(game)
 	_test_fast_ghost_death(game)
@@ -318,6 +319,67 @@ func _test_screen_wrap(game) -> void:
 	print("SCREEN_WRAP_TEST_OK both_directions fps_30_60_120 velocity_jump_health_preserved")
 
 
+func _test_moving_platforms(game) -> void:
+	game.start_game()
+	var initial_blocks: Array = game.blocks.duplicate(true)
+	assert(is_equal_approx(game.blocks[0]["pos"].x + game.blocks[0]["size"].x * 0.5, game.player_pos.x), "The first moving platform must start beneath the hero")
+	game._process(0.2)
+	assert(game.blocks == initial_blocks, "Platforms must wait while the introductory hint is open")
+	game.tutorial_visible = false
+	game.paused = true
+	game._process(0.2)
+	assert(game.blocks == initial_blocks, "Pause must freeze moving platforms")
+	game.paused = false
+	game.tilt_control.blocking = true
+	game._process(0.2)
+	assert(game.blocks == initial_blocks, "Sensor permission must freeze moving platforms")
+	game.tilt_control.blocking = false
+	var moved_left := false
+	var moved_right := false
+	for frame in 900:
+		var previous_x: float = game.blocks[0]["pos"].x
+		game.update_platforms(1.0 / 30.0)
+		moved_left = moved_left or game.blocks[0]["pos"].x < previous_x - 0.01
+		moved_right = moved_right or game.blocks[0]["pos"].x > previous_x + 0.01
+		for index in game.blocks.size():
+			var block: Dictionary = game.blocks[index]
+			assert(block["pos"].x >= 21.99 and block["pos"].x + block["size"].x <= 518.01, "The full platform must remain inside the screen")
+			assert(block["pos"].y == initial_blocks[index]["pos"].y, "Horizontal motion must preserve platform heights")
+			if block["spring"]:
+				assert(is_equal_approx(game.spring_rect(block).get_center().x, block["pos"].x + block["size"].x * 0.5), "The spring must stay attached to its moving platform")
+	assert(moved_left and moved_right, "Platforms must travel both left and right")
+	var positions_at_30_fps: Array = []
+	for frames_per_second in [30, 60, 120]:
+		game.blocks = initial_blocks.duplicate(true)
+		for frame in frames_per_second * 4:
+			game.update_platforms(1.0 / frames_per_second)
+		for index in game.blocks.size():
+			if frames_per_second == 30:
+				positions_at_30_fps.append(game.blocks[index]["pos"])
+			else:
+				assert(game.blocks[index]["pos"].distance_to(positions_at_30_fps[index]) < 0.01, "Platform motion must be consistent across frame rates")
+	var x_before_scroll: float = game.blocks[0]["pos"].x
+	var y_before_scroll: float = game.blocks[0]["pos"].y
+	game.shift_world(80)
+	game.update_platforms(0.0)
+	assert(is_equal_approx(game.blocks[0]["pos"].x, x_before_scroll) and is_equal_approx(game.blocks[0]["pos"].y, y_before_scroll + 80), "Camera scrolling must preserve the platform's horizontal path")
+	# Move a spring far from its original position and land on its new location.
+	var moving_spring := {"pos": Vector2(100, 650), "size": Vector2(150, 60), "skin": 5, "kind": 1, "hp": 2, "max_hp": 2, "spring": true,
+		"motion_center": 200.0, "motion_amplitude": 100.0, "motion_phase": PI * 1.5, "motion_rate": 0.5}
+	game.blocks = [moving_spring]
+	game.update_platforms(TAU)
+	game.player_pos = Vector2(375, 550)
+	game.player_vel = Vector2(0, 180)
+	game.check_player_block_collisions()
+	assert(game.spring_boost_timer == 8.0 and not moving_spring["spring"], "Spring collisions must follow the moving artwork")
+	game.ghosts.clear()
+	var impact: Vector2 = moving_spring["pos"] + moving_spring["size"] * 0.5
+	game.rockets = [{"pos": impact, "vel": Vector2.ZERO, "life": 1.0, "trail": 0.0}]
+	game.update_rockets(1.0 / 60.0)
+	assert(game.blocks.is_empty() and game.rockets.is_empty(), "Rockets must hit and destroy the platform at its new location")
+	print("MOVING_PLATFORMS_TEST_OK left_right bounds pause spring_contact rocket_contact scroll fps_30_60_120")
+
+
 func _test_platform_jump(game) -> void:
 	for frames_per_second in [30, 60, 120]:
 		for gap in [game.BLOCK_GAP_MIN, (game.BLOCK_GAP_MIN + game.BLOCK_GAP_MAX) * 0.5, game.BLOCK_GAP_MAX]:
@@ -325,7 +387,8 @@ func _test_platform_jump(game) -> void:
 			game.tutorial_visible = false
 			game.ghosts.clear()
 			game.spawn_cursor_y = -100000.0
-			var next_platform := {"pos": Vector2(170, 760 - gap), "size": Vector2(200, 60), "skin": 5, "kind": 1, "hp": 2, "max_hp": 2}
+			var next_platform := {"pos": Vector2(170, 760 - gap), "size": Vector2(200, 60), "skin": 5, "kind": 1, "hp": 2, "max_hp": 2,
+				"motion_center": 170.0, "motion_amplitude": 70.0, "motion_phase": 0.0, "motion_rate": 0.6}
 			game.blocks = [
 				{"pos": Vector2(170, 760), "size": Vector2(200, 60), "skin": 0, "kind": 0, "hp": 1, "max_hp": 1},
 				next_platform

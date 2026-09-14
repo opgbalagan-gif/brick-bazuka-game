@@ -7,6 +7,8 @@ const SAVE_PATH := "user://brick_bazuka_save.cfg"
 const INITIAL_BLOCK_ROWS := 4
 const BLOCK_GAP_MIN := 250.0
 const BLOCK_GAP_MAX := 310.0
+const PLATFORM_SPEED_MIN := 35.0
+const PLATFORM_SPEED_MAX := 60.0
 const PLAYER_GRAVITY := 690.0
 const PLATFORM_JUMP_HEIGHT := BLOCK_GAP_MAX + 60.0
 const PLATFORM_BOUNCE_SPEED := sqrt(2.0 * PLAYER_GRAVITY * PLATFORM_JUMP_HEIGHT)
@@ -478,6 +480,7 @@ func update_game(delta: float) -> void:
 		shift_world(camera_shift)
 
 	spawn_world_if_needed()
+	update_platforms(delta)
 	update_ghosts(delta)
 	update_ghost_deaths(delta)
 	update_rockets(delta)
@@ -524,14 +527,31 @@ func spawn_block(y_position: float) -> void:
 	if region.size.x / region.size.y > 3.0:
 		width = rng.randf_range(185, 215)
 	var size := Vector2(width, width * region.size.y / region.size.x)
-	var x := rng.randf_range(22.0, 518.0 - width)
+	var amplitude := rng.randf_range(50.0, 110.0)
+	var center_x := rng.randf_range(22.0 + amplitude, VIEW_SIZE.x - 22.0 - width - amplitude)
+	var phase := rng.randf_range(0.0, TAU)
+	# Keep the first moving platform under the hero for the opening bounce.
+	if blocks.is_empty() and is_equal_approx(y_position, 760.0):
+		center_x = (VIEW_SIZE.x - width) * 0.5
+		phase = 0.0
+	var x := center_x + sin(phase) * amplitude
+	var motion_rate := rng.randf_range(PLATFORM_SPEED_MIN, PLATFORM_SPEED_MAX) / amplitude
 	var hp := int(art.get("hp", 1))
 	var has_spring := platforms_until_spring <= 0
 	platforms_until_spring = rng.randi_range(4, 6) if has_spring else platforms_until_spring - 1
-	blocks.append({"pos": Vector2(x, y_position), "size": size, "skin": skin, "kind": int(art["kind"]), "hp": hp, "max_hp": hp, "spring": has_spring})
+	blocks.append({"pos": Vector2(x, y_position), "size": size, "skin": skin, "kind": int(art["kind"]), "hp": hp, "max_hp": hp, "spring": has_spring,
+		"motion_center": center_x, "motion_amplitude": amplitude, "motion_phase": phase, "motion_rate": motion_rate})
 	# Keep spring takeoffs clear; ordinary rows can have a drifting ghost above a brick.
 	if not has_spring and y_position < 520.0 and rng.randf() < GHOST_SPAWN_CHANCE:
 		ghosts.append(make_ghost(Vector2(clampf(x + width * 0.5 + rng.randf_range(-55, 55), 55, 485), y_position - 79), rng.randf_range(34, 62) * (-1.0 if rng.randf() < 0.5 else 1.0)))
+
+
+func update_platforms(delta: float) -> void:
+	for block in blocks:
+		if not block.has("motion_phase"):
+			continue
+		block["motion_phase"] = fposmod(float(block["motion_phase"]) + float(block["motion_rate"]) * delta, TAU)
+		block["pos"].x = float(block["motion_center"]) + sin(float(block["motion_phase"])) * float(block["motion_amplitude"])
 
 
 func make_ghost(position: Vector2, horizontal_speed: float) -> Dictionary:
