@@ -19,7 +19,7 @@ godot --path .
 - Tilt the phone left/right to steer. Each run calibrates its initial position as neutral; a 3-degree dead zone filters hand tremors. Screen rotation and returning from a hidden tab recalibrate the Web sensor.
 - On iPhone, tap **ВКЛЮЧИТЬ НАКЛОН** and allow motion/orientation access. Play waits while this dialog is open. Sensor access requires HTTPS (or localhost on the same device); a plain HTTP LAN address will offer touch arrows instead. Denied or unavailable sensors also have touch-arrow controls.
 - On desktop, use **←/→** or physical **A/D** (**Ф/В** on a Russian layout) to move. The first movement key dismisses the introductory overlay and starts play. Keyboard hints appear on the title screen and before the first move; platform jumps remain automatic. Touch/mouse aiming and shooting remain independent of movement.
-- Hold touch/mouse, drag to aim, and release over a point or brick to fire.
+- Hold touch/mouse, drag to aim, and release toward a ghost to fire.
 - The bazooka aims faster than the body; the body smoothly leans toward the same shot direction.
 - The rocket spawns from the rotating muzzle and flies toward the aim point. Shooting does not change the hero's position, velocity or trajectory in any direction.
 - Enter or Space: start from the title screen; during play, fire straight down. Either key also resumes a paused run without firing.
@@ -36,7 +36,7 @@ godot --path .
 - The vertical world is generated continuously above the player, with brick structures positioned for downward and diagonal shots.
 - Single platforms are spaced 250–310 pixels apart, leaving roughly 3–4 visible at once. Brown brick, stone, cracked and slime-covered variants use the supplied artwork.
 - All generated platforms glide left and right with smooth turns, independent phases, 50–110 pixels of travel each way and peak speeds of 35–60 pixels per second. They stay fully inside the screen. Springs and collision areas follow the platforms; pausing, the introductory hint and sensor permission freeze their motion. The first platform begins under the hero.
-- Rockets have directional flight, trails and explosion radius; destroyed bricks create debris. Reinforced stone takes two hits and cracks after the first.
+- Rockets pass through all platforms and springs, hitting only ghosts. Their explosions also leave platforms intact. Landing still damages platforms: reinforced stone takes two landings and cracks after the first; destroyed bricks create debris.
 - Ghost enemies use the supplied videos as transparent animated sprites: calm while distant, angry within 200 pixels of the hero, and calm again beyond 250 pixels. The gap keeps their expressions from flickering at the boundary.
 - A rocket or nearby explosion removes the ghost's collision immediately and plays the supplied death animation once. Touching a live ghost consumes one of three hearts from the first hit, with brief invulnerability and knockback.
 - Ghost death plays at twice the source speed, completing the whole dispersal in about 0.92 seconds.

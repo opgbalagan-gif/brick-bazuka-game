@@ -102,10 +102,14 @@ func _run() -> void:
 	game.damage_block(0, 99)
 	assert(game.smashed_total == smashed_before + 1, "Brick destruction must advance the destruction count")
 	game.blocks = [{"pos": Vector2(220, 610), "size": Vector2(180, 61), "skin": 5, "kind": 1, "hp": 2, "max_hp": 2}]
-	game.damage_explosion(Vector2(240, 615), 0)
-	assert(game.blocks.size() == 1 and game.blocks[0]["hp"] == 1, "Reinforced stone must survive the first rocket with visible cracks")
-	game.damage_explosion(Vector2(240, 615), 0)
-	assert(game.blocks.is_empty(), "The second rocket must destroy reinforced stone")
+	game.player_pos = Vector2(270, 560)
+	game.player_vel = Vector2(0, 180)
+	game.check_player_block_collisions()
+	assert(game.blocks.size() == 1 and game.blocks[0]["hp"] == 1, "Reinforced stone must survive the first landing with visible cracks")
+	game.player_pos = Vector2(270, 560)
+	game.player_vel = Vector2(0, 180)
+	game.check_player_block_collisions()
+	assert(game.blocks.is_empty(), "The second landing must destroy reinforced stone")
 	game.blocks = [{"pos": Vector2(220, 610), "size": Vector2(120, 52), "kind": 0, "hp": 1, "max_hp": 1}]
 	game.player_pos = Vector2(270, 560)
 	game.player_vel = Vector2(0, 180)
@@ -163,7 +167,7 @@ func _run() -> void:
 	game.shift_world(65)
 	assert(game.ghost_deaths[0]["pos"].distance_to(ghost_position + Vector2(0, 65)) < 0.01, "Death effects must follow world scrolling")
 	game.ghosts = [{"pos": Vector2(200, 250), "vx": 0.0, "phase": 0.0, "variant": 1}]
-	game.damage_explosion(Vector2(220, 250), -1)
+	game.pop_ghosts_near(Vector2(220, 250), 60.0)
 	assert(game.ghosts.is_empty(), "Nearby explosions must pop ghosts too")
 	assert(game.ghost_deaths.size() == 2, "Each defeated ghost must have its own death playback")
 	game.update_ghost_deaths(2.0)
@@ -249,6 +253,7 @@ func _run() -> void:
 	_test_platform_jump(game)
 	_test_spring_boost(game)
 	_test_fast_ghost_death(game)
+	_test_rockets_ignore_platforms(game)
 	_test_shots_preserve_motion(game)
 	game.save_profile()
 	var saved_profile := ConfigFile.new()
@@ -376,8 +381,8 @@ func _test_moving_platforms(game) -> void:
 	var impact: Vector2 = moving_spring["pos"] + moving_spring["size"] * 0.5
 	game.rockets = [{"pos": impact, "vel": Vector2.ZERO, "life": 1.0, "trail": 0.0}]
 	game.update_rockets(1.0 / 60.0)
-	assert(game.blocks.is_empty() and game.rockets.is_empty(), "Rockets must hit and destroy the platform at its new location")
-	print("MOVING_PLATFORMS_TEST_OK left_right bounds pause spring_contact rocket_contact scroll fps_30_60_120")
+	assert(game.blocks.size() == 1 and moving_spring["hp"] == 1 and game.rockets.size() == 1, "A rocket inside the moving platform must leave its health unchanged and continue flying")
+	print("MOVING_PLATFORMS_TEST_OK left_right bounds pause spring_contact rocket_pass_through scroll fps_30_60_120")
 
 
 func _test_platform_jump(game) -> void:
@@ -499,6 +504,42 @@ func _test_fast_ghost_death(game) -> void:
 	game.update_ghost_deaths(0.03)
 	assert(game.ghost_deaths.is_empty(), "The full ghost death must finish in about 0.92 seconds")
 	print("GHOST_DEATH_TEST_OK double_speed full_clip under_one_second")
+
+
+func _test_rockets_ignore_platforms(game) -> void:
+	for frames_per_second in [30, 60, 120]:
+		for direction in [-1.0, 1.0]:
+			game.start_game()
+			game.ghosts.clear()
+			game.blocks = [
+				{"pos": Vector2(200, 390), "size": Vector2(140, 60), "skin": 0, "kind": 0, "hp": 1, "max_hp": 1, "spring": true},
+				{"pos": Vector2(200, 480), "size": Vector2(140, 60), "skin": 5, "kind": 1, "hp": 2, "max_hp": 2, "spring": true},
+				{"pos": Vector2(200, 570), "size": Vector2(140, 60), "skin": 4, "kind": 2, "hp": 1, "max_hp": 1, "spring": true}
+			]
+			var platforms_before: Array = game.blocks.duplicate(true)
+			var smashed_before: int = game.smashed_total
+			var origin := Vector2(270, 700 if direction < 0 else 300)
+			var shot := {"pos": origin, "vel": Vector2(0, direction * 690), "life": 2.2, "trail": 0.0}
+			game.rockets = [shot.duplicate()]
+			for frame in frames_per_second:
+				game.update_rockets(1.0 / frames_per_second)
+			assert(game.rockets.size() == 1, "Rockets must fly through every platform and spring without exploding")
+			assert(game.blocks == platforms_before and game.smashed_total == smashed_before, "Shooting through platforms must not damage, crack or remove them")
+			game.update_rockets(1.3)
+			assert(game.rockets.is_empty(), "Missed shots must still expire normally")
+			var target := Vector2(270, 420 if direction < 0 else 600)
+			game.ghosts = [game.make_ghost(target, 0), game.make_ghost(Vector2(450, 300), 0)]
+			game.ghost_deaths.clear()
+			game.rockets = [shot.duplicate()]
+			for frame in frames_per_second:
+				game.update_rockets(1.0 / frames_per_second)
+				if game.rockets.is_empty():
+					break
+			assert(game.rockets.is_empty() and game.ghosts.size() == 1 and game.ghost_deaths.size() == 1, "A rocket must pass through intervening platforms and kill the ghost beyond them")
+			assert(game.ghosts[0]["pos"] == Vector2(450, 300), "Distant ghosts must survive the impact")
+			assert(game.blocks == platforms_before and game.smashed_total == smashed_before, "An explosion inside a platform must leave all blocks and springs intact")
+			assert(game.health == 3 and game.spring_boost_timer == 0.0, "Rockets must not damage the hero or activate springs")
+	print("ROCKET_TARGETS_TEST_OK pass_through_all_blocks springs_safe ghosts_hit blast_safe expiry fps_30_60_120")
 
 
 func _test_shots_preserve_motion(game) -> void:

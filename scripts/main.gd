@@ -616,22 +616,14 @@ func update_rockets(delta: float) -> void:
 			var trail_direction: Vector2 = -rocket["vel"].normalized()
 			var trail_velocity := trail_direction * rng.randf_range(18, 60) + Vector2(rng.randf_range(-25, 25), rng.randf_range(-25, 25))
 			particles.append(make_particle(rocket["pos"] + trail_direction * 13, trail_velocity, Color("d7eef0"), rng.randf_range(4, 8), 0.42, -15))
-		var hit_index := -1
-		var rocket_rect := Rect2(rocket["pos"] - Vector2(12, 12), Vector2(24, 24))
 		var hit_ghost := false
 		for ghost in ghosts:
 			if rocket["pos"].distance_to(ghost["pos"]) < 32.0:
 				hit_ghost = true
 				break
-		if not hit_ghost:
-			for block_index in range(blocks.size() - 1, -1, -1):
-				var block = blocks[block_index]
-				if rocket_rect.intersects(Rect2(block["pos"], block["size"])):
-					hit_index = block_index
-					break
-		if hit_ghost or hit_index >= 0:
+		if hit_ghost:
 			spawn_explosion(rocket["pos"])
-			damage_explosion(rocket["pos"], hit_index)
+			pop_ghosts_near(rocket["pos"], 60.0)
 			camera_shake = 1.0
 			screen_flash = 0.38
 			rockets.remove_at(index)
@@ -639,18 +631,6 @@ func update_rockets(delta: float) -> void:
 			rockets.remove_at(index)
 		else:
 			rockets[index] = rocket
-
-
-func damage_explosion(position: Vector2, direct_index: int) -> void:
-	var radius := 60.0
-	for index in range(blocks.size() - 1, -1, -1):
-		var block = blocks[index]
-		var center: Vector2 = block["pos"] + block["size"] * 0.5
-		if index == direct_index:
-			damage_block(index, 1)
-		elif center.distance_to(position) <= radius:
-			damage_block(index, 1)
-	pop_ghosts_near(position, radius)
 
 
 func pop_ghosts_near(position: Vector2, radius: float) -> void:
