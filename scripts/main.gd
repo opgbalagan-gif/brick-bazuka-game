@@ -904,10 +904,7 @@ func draw_player() -> void:
 		tint = Color("ff8573")
 	if not facing_left:
 		scale_value.x *= -1.0
-	draw_set_transform(player_pos + current_shake_offset, body_rotation, scale_value)
-	draw_polygon(hero_body_polygon, PackedColorArray([tint]), hero_body_uvs, HERO_BODY_TEX)
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-
+	# Draw the weapon behind the hero so aiming never covers the face.
 	var weapon_pivot := get_weapon_pivot() + current_shake_offset
 	var weapon_recoil_offset := -aim_direction * weapon_kick * 11.0
 	var weapon_origin := weapon_pivot + weapon_recoil_offset
@@ -922,6 +919,8 @@ func draw_player() -> void:
 	var label_position := weapon_origin + label_offset.rotated(weapon_draw_state["rotation"])
 	draw_set_transform(label_position, weapon_draw_state["rotation"], Vector2.ONE)
 	draw_label("SNW", Vector2(-13, 4), 9, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 26, 1)
+	draw_set_transform(player_pos + current_shake_offset, body_rotation, scale_value)
+	draw_polygon(hero_body_polygon, PackedColorArray([tint]), hero_body_uvs, HERO_BODY_TEX)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 

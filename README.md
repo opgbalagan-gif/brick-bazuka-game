@@ -20,7 +20,7 @@ godot --path .
 - On iPhone, tap **ВКЛЮЧИТЬ НАКЛОН** and allow motion/orientation access. Play waits while this dialog is open. Sensor access requires HTTPS (or localhost on the same device); a plain HTTP LAN address will offer touch arrows instead. Denied or unavailable sensors also have touch-arrow controls.
 - On desktop, use **←/→** or physical **A/D** (**Ф/В** on a Russian layout) to move. The first movement key dismisses the introductory overlay and starts play. Keyboard hints appear on the title screen and before the first move; platform jumps remain automatic. Taps and clicks fire independently of movement.
 - Tap anywhere (or click on desktop) to fire immediately at the nearest visible ghost. No aiming or dragging is needed. Releasing or dragging does not fire again.
-- The bazooka aims faster than the body; the body smoothly leans toward the same shot direction.
+- The bazooka aims faster than the body; the body smoothly leans toward the same shot direction. The weapon is drawn behind the hero so it cannot cover the face at any angle.
 - Rockets track the selected ghost as it moves. If it disappears, they seek another visible ghost; with no ghosts, a shot flies upward. Shooting does not change the hero's position, velocity or trajectory in any direction.
 - Enter or Space: start from the title screen; during play, fire a homing rocket. Either key also resumes a paused run without firing.
 - Escape: pause.
