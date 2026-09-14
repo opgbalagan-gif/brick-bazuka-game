@@ -10,12 +10,16 @@ const BLOCK_GAP_MAX := 310.0
 const PLAYER_GRAVITY := 690.0
 const PLATFORM_JUMP_HEIGHT := BLOCK_GAP_MAX + 60.0
 const PLATFORM_BOUNCE_SPEED := sqrt(2.0 * PLAYER_GRAVITY * PLATFORM_JUMP_HEIGHT)
+const SPRING_BOOST_DURATION := 8.0
+const SPRING_BOUNCE_SPEED := sqrt(2.0 * PLAYER_GRAVITY * PLATFORM_JUMP_HEIGHT * 2.0)
+const SPRING_SIZE := Vector2(60, 48)
 const STEERING_SPEED := 320.0
 const STEERING_ACCELERATION := 1800.0
 const GHOST_SPAWN_CHANCE := 0.38
 const GHOST_ALERT_DISTANCE := 200.0
 const GHOST_CALM_DISTANCE := 250.0
 const GHOST_TRANSITION_TIME := 0.12
+const GHOST_DEATH_PLAYBACK_SPEED := 2.0
 const GHOST_DRAW_SIZE := Vector2(92, 92)
 const MAX_HEALTH := 3
 
@@ -31,6 +35,19 @@ const LEADERBOARD_UI := preload("res://scripts/leaderboard.gd")
 const TILT_CONTROL := preload("res://scripts/tilt_control.gd")
 const BAZOOKA_BODY_TEX := preload("res://assets/weapons/bazooka_body.png")
 const ROCKET_TEX := preload("res://assets/weapons/rocket.svg")
+const SPRING_TEX := preload("res://assets/powerups/spring.svg")
+
+# Clip the baked-in boot exhaust at the soles without changing the supplied sprite.
+const HERO_BODY_OUTLINE := [
+	Vector2(0, 0), Vector2(1368, 0), Vector2(1368, 750), Vector2(1124, 750),
+	Vector2(1110, 766), Vector2(1100, 781), Vector2(1075, 798), Vector2(1033, 812),
+	Vector2(1018, 823), Vector2(1018, 841), Vector2(1007, 860), Vector2(980, 895), Vector2(941, 918),
+	Vector2(903, 931), Vector2(866, 934), Vector2(830, 925), Vector2(800, 906),
+	Vector2(788, 879), Vector2(785, 842), Vector2(769, 830), Vector2(741, 833),
+	Vector2(723, 850), Vector2(690, 860), Vector2(661, 867), Vector2(634, 875),
+	Vector2(604, 879), Vector2(572, 882), Vector2(532, 882), Vector2(495, 880),
+	Vector2(471, 876), Vector2(451, 862), Vector2(0, 862)
+]
 
 const PLATFORM_SHEETS := [
 	preload("res://assets/blocks/reference_brick.png"),
@@ -95,6 +112,10 @@ var hit_timer := 0.0
 var contact_cooldown := 0.0
 var damage_flash := 0.0
 var health := MAX_HEALTH
+var spring_boost_timer := 0.0
+var platforms_until_spring := 2
+var hero_body_polygon := PackedVector2Array()
+var hero_body_uvs := PackedVector2Array()
 var camera_shake := 0.0
 var screen_flash := 0.0
 var last_shot_direction := Vector2.DOWN
@@ -123,6 +144,10 @@ var cta_rect := Rect2(151, 754, 238, 90)
 func _ready() -> void:
 	rng.randomize()
 	load_profile()
+	for point in HERO_BODY_OUTLINE:
+		var uv: Vector2 = point / HERO_BODY_TEX.get_size()
+		hero_body_uvs.append(uv)
+		hero_body_polygon.append(Vector2(-67, -57) + uv * Vector2(134, 114))
 	tilt_control = TILT_CONTROL.new()
 	add_child(tilt_control)
 	setup_video_background()
@@ -368,6 +393,8 @@ func start_game() -> void:
 	contact_cooldown = 0.0
 	damage_flash = 0.0
 	health = MAX_HEALTH
+	spring_boost_timer = 0.0
+	platforms_until_spring = 2
 	weapon_kick = 0.0
 	camera_shake = 0.0
 	screen_flash = 0.0
@@ -427,6 +454,7 @@ func launch_player(target: Vector2) -> void:
 
 
 func update_game(delta: float) -> void:
+	spring_boost_timer = maxf(0.0, spring_boost_timer - delta)
 	player_vel.y += PLAYER_GRAVITY * delta
 	player_vel.x = move_toward(player_vel.x, tilt_control.read_axis() * STEERING_SPEED, STEERING_ACCELERATION * delta)
 	player_pos += player_vel * delta
@@ -488,9 +516,11 @@ func spawn_block(y_position: float) -> void:
 	var size := Vector2(width, width * region.size.y / region.size.x)
 	var x := rng.randf_range(22.0, 518.0 - width)
 	var hp := int(art.get("hp", 1))
-	blocks.append({"pos": Vector2(x, y_position), "size": size, "skin": skin, "kind": int(art["kind"]), "hp": hp, "max_hp": hp})
-	# Keep the opening safe; later rows can contain a drifting ghost above a brick.
-	if y_position < 520.0 and rng.randf() < GHOST_SPAWN_CHANCE:
+	var has_spring := platforms_until_spring <= 0
+	platforms_until_spring = rng.randi_range(4, 6) if has_spring else platforms_until_spring - 1
+	blocks.append({"pos": Vector2(x, y_position), "size": size, "skin": skin, "kind": int(art["kind"]), "hp": hp, "max_hp": hp, "spring": has_spring})
+	# Keep spring takeoffs clear; ordinary rows can have a drifting ghost above a brick.
+	if not has_spring and y_position < 520.0 and rng.randf() < GHOST_SPAWN_CHANCE:
 		ghosts.append(make_ghost(Vector2(clampf(x + width * 0.5 + rng.randf_range(-55, 55), 55, 485), y_position - 79), rng.randf_range(34, 62) * (-1.0 if rng.randf() < 0.5 else 1.0)))
 
 
@@ -540,7 +570,7 @@ func update_ghosts(delta: float) -> void:
 
 func update_ghost_deaths(delta: float) -> void:
 	for index in range(ghost_deaths.size() - 1, -1, -1):
-		ghost_deaths[index]["time"] = float(ghost_deaths[index]["time"]) + delta
+		ghost_deaths[index]["time"] = float(ghost_deaths[index]["time"]) + delta * GHOST_DEATH_PLAYBACK_SPEED
 		if float(ghost_deaths[index]["time"]) >= ghost_clip_duration("death"):
 			ghost_deaths.remove_at(index)
 
@@ -617,6 +647,10 @@ func damage_block(index: int, damage: int) -> void:
 		spawn_hit_sparks(block["pos"] + block["size"] * 0.5)
 
 
+func spring_rect(block: Dictionary) -> Rect2:
+	return Rect2(block["pos"] + Vector2((block["size"].x - SPRING_SIZE.x) * 0.5, -SPRING_SIZE.y), SPRING_SIZE)
+
+
 func check_player_block_collisions() -> void:
 	if player_vel.y <= 0:
 		return
@@ -624,9 +658,19 @@ func check_player_block_collisions() -> void:
 	for index in range(blocks.size() - 1, -1, -1):
 		var block = blocks[index]
 		var block_rect := Rect2(block["pos"], block["size"])
+		if block.get("spring", false):
+			var spring := spring_rect(block)
+			if feet.intersects(spring) and player_pos.y < spring.position.y + 16:
+				block["spring"] = false
+				spring_boost_timer = SPRING_BOOST_DURATION
+				player_pos.y = spring.position.y - 48
+				player_vel.y = -SPRING_BOUNCE_SPEED
+				show_toast("СУПЕРПРЫЖОК!")
+				damage_block(index, 1)
+				return
 		if feet.intersects(block_rect) and player_pos.y < block_rect.position.y + 16:
 			player_pos.y = block_rect.position.y - 48
-			player_vel.y = -PLATFORM_BOUNCE_SPEED
+			player_vel.y = -SPRING_BOUNCE_SPEED if spring_boost_timer > 0.0 else -PLATFORM_BOUNCE_SPEED
 			hit_timer = 0.12
 			damage_block(index, 1)
 			return
@@ -804,6 +848,9 @@ func draw_game() -> void:
 		current_shake_offset = Vector2(rng.randf_range(-1, 1), rng.randf_range(-1, 1)) * camera_shake * 6.0
 	draw_set_transform(current_shake_offset, 0.0, Vector2.ONE)
 	platform_layer.position = current_shake_offset
+	for block in blocks:
+		if block.get("spring", false):
+			draw_texture_rect(SPRING_TEX, spring_rect(block), false)
 	for ghost in ghosts:
 		draw_enemy_ghost(ghost)
 	draw_ghost_deaths()
@@ -864,7 +911,7 @@ func draw_player() -> void:
 	if not facing_left:
 		scale_value.x *= -1.0
 	draw_set_transform(player_pos + current_shake_offset, body_rotation, scale_value)
-	draw_texture_rect(HERO_BODY_TEX, Rect2(-67, -57, 134, 114), false, tint)
+	draw_polygon(hero_body_polygon, PackedColorArray([tint]), hero_body_uvs, HERO_BODY_TEX)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 	var weapon_pivot := get_weapon_pivot() + current_shake_offset
@@ -886,6 +933,10 @@ func draw_player() -> void:
 
 func draw_game_hud() -> void:
 	draw_score_counter()
+	if spring_boost_timer > 0.0:
+		draw_texture_rect(SPRING_TEX, Rect2(204, 127, 30, 24), false)
+		draw_rect(Rect2(244, 132, 92, 14), INK)
+		draw_rect(Rect2(247, 135, 86 * spring_boost_timer / SPRING_BOOST_DURATION, 8), LIME)
 	for index in MAX_HEALTH:
 		var center := Vector2(VIEW_SIZE.x * 0.5 + (index - (MAX_HEALTH - 1) * 0.5) * 46, VIEW_SIZE.y - 43)
 		var heart_color := RED if index < health else Color("405062")

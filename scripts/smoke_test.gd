@@ -244,6 +244,8 @@ func _run() -> void:
 	_test_tilt_steering(game)
 	_test_screen_wrap(game)
 	_test_platform_jump(game)
+	_test_spring_boost(game)
+	_test_fast_ghost_death(game)
 	_test_shots_preserve_motion(game)
 	game.save_profile()
 	var saved_profile := ConfigFile.new()
@@ -341,6 +343,97 @@ func _test_platform_jump(game) -> void:
 			assert(landed_on_next_platform and game.player_vel.y < 0, "Hero must land on and bounce from the next platform")
 			assert(game.health == 3 and game.rockets.is_empty(), "Reaching the next platform must need no shots or lost lives")
 	print("PLATFORM_JUMP_TEST_OK gaps_250_280_310 fps_30_60_120 landing_without_shots")
+
+
+func _spring_test_platform(has_spring: bool = true) -> Dictionary:
+	return {"pos": Vector2(150, 700), "size": Vector2(240, 65), "skin": 5, "kind": 1, "hp": 2, "max_hp": 2, "spring": has_spring}
+
+
+func _test_spring_boost(game) -> void:
+	game.start_game()
+	assert(game.blocks[2]["spring"], "A spring must be discoverable on the third opening platform")
+	var last_spring_row := -1
+	var spring_count := 0
+	for row in 60:
+		var ghosts_before: int = game.ghosts.size()
+		game.spawn_block(-row * 280.0)
+		if game.blocks.back()["spring"]:
+			assert(game.ghosts.size() == ghosts_before, "Spring takeoff must not spawn a ghost on top of the pickup")
+			if last_spring_row >= 0:
+				assert(row - last_spring_row >= 5 and row - last_spring_row <= 7, "Springs must keep appearing every five to seven platforms")
+			last_spring_row = row
+			spring_count += 1
+	assert(spring_count >= 8, "A long run must contain repeated spring opportunities")
+	for frames_per_second in [30, 60, 120]:
+		game.start_game()
+		game.tutorial_visible = false
+		game.ghosts.clear()
+		game.spawn_cursor_y = -100000.0
+		var spring_platform := _spring_test_platform()
+		game.blocks = [spring_platform]
+		game.player_pos = Vector2(270, 600)
+		game.player_vel = Vector2(0, -100)
+		game.check_player_block_collisions()
+		assert(game.spring_boost_timer == 0.0 and spring_platform["spring"], "Passing upwards through a spring must not activate it")
+		game.player_pos = Vector2(170, 600)
+		game.player_vel.y = 180
+		game.check_player_block_collisions()
+		assert(game.spring_boost_timer == 0.0, "Missing the spring horizontally must not collect it")
+		game.player_pos = Vector2(270, 590)
+		game.player_vel.y = 180
+		for frame in frames_per_second:
+			game._process(1.0 / frames_per_second)
+			if game.spring_boost_timer > 0.0:
+				break
+		assert(game.spring_boost_timer == 8.0 and not spring_platform["spring"], "Landing must consume the spring and grant eight seconds of boost")
+		assert(game.player_vel.y < -1000 and game.health == 3, "Spring contact must launch the hero immediately without damage")
+		var takeoff_y: float = game.player_pos.y
+		game.blocks.clear()
+		for frame in frames_per_second * 2:
+			game._process(1.0 / frames_per_second)
+			if game.player_vel.y >= 0.0:
+				break
+		var rise: float = takeoff_y - game.player_pos.y + game.height_meters / 0.19
+		assert(rise > 700 and rise < 750, "A spring jump must actually rise about twice the normal 370 pixels at every frame rate")
+		game.blocks = [_spring_test_platform(false)]
+		game.player_pos = Vector2(270, 650)
+		game.player_vel = Vector2(0, 180)
+		game.check_player_block_collisions()
+		assert(game.player_vel.y < -1000, "The boost must strengthen later jumps from ordinary platforms too")
+		var timer_before: float = game.spring_boost_timer
+		game.paused = true
+		game._process(1.0)
+		assert(game.spring_boost_timer == timer_before, "Pausing must preserve the remaining boost")
+		game.paused = false
+		game.tilt_control.blocking = true
+		game._process(1.0)
+		assert(game.spring_boost_timer == timer_before, "Sensor permission must not consume the boost")
+		game.tilt_control.blocking = false
+		game.blocks = [_spring_test_platform()]
+		game.player_pos = Vector2(270, 600)
+		game.player_vel.y = 180
+		game.check_player_block_collisions()
+		assert(game.spring_boost_timer == 8.0, "Another spring must refresh the duration without stacking strength or time")
+		game.spring_boost_timer = 0.01
+		game.blocks = [_spring_test_platform(false)]
+		game.player_pos = Vector2(270, 650)
+		game.player_vel = Vector2(0, 180)
+		game.update_game(0.02)
+		assert(game.spring_boost_timer == 0.0 and is_equal_approx(game.player_vel.y, -game.PLATFORM_BOUNCE_SPEED), "After expiry, the next platform must give the normal jump")
+	game.spring_boost_timer = 6.0
+	game.start_game()
+	assert(game.spring_boost_timer == 0.0, "Restarting must clear the previous run's boost")
+	print("SPRING_TEST_OK recurring_spawns contact double_height later_jumps expiry pause refresh restart fps_30_60_120")
+
+
+func _test_fast_ghost_death(game) -> void:
+	game.start_game()
+	game.spawn_ghost_pop(Vector2(270, 450))
+	game.update_ghost_deaths(0.9)
+	assert(game.ghost_deaths.size() == 1 and is_equal_approx(game.ghost_deaths[0]["time"], 1.8), "Ghost dispersal must play twice as fast, keeping the end of the clip")
+	game.update_ghost_deaths(0.03)
+	assert(game.ghost_deaths.is_empty(), "The full ghost death must finish in about 0.92 seconds")
+	print("GHOST_DEATH_TEST_OK double_speed full_clip under_one_second")
 
 
 func _test_shots_preserve_motion(game) -> void:

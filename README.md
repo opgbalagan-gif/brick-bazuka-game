@@ -31,12 +31,14 @@ godot --path .
 
 - Tilt/keyboard steering controls horizontal movement with smooth acceleration and braking. Gravity and platform bounces control vertical movement. Shots apply no jump impulse, horizontal correction or recoil to the hero; only the weapon plays a firing animation.
 - Crossing either side of the screen brings the hero in from the opposite side, preserving speed and the current jump without losing a heart.
+- A spring appears on the third opening platform and then every 5–7 platforms. Landing on it consumes it and doubles jump height for 8 seconds, including subsequent ordinary platform bounces. Another spring refreshes the duration; pausing freezes it. A spring icon and shrinking green bar show the remaining boost.
 - Physics/collision stays axis-aligned; only the character and weapon visual layers rotate.
 - The vertical world is generated continuously above the player, with brick structures positioned for downward and diagonal shots.
 - Single platforms are spaced 250–310 pixels apart, leaving roughly 3–4 visible at once. Brown brick, stone, cracked and slime-covered variants use the supplied artwork.
 - Rockets have directional flight, trails and explosion radius; destroyed bricks create debris. Reinforced stone takes two hits and cracks after the first.
 - Ghost enemies use the supplied videos as transparent animated sprites: calm while distant, angry within 200 pixels of the hero, and calm again beyond 250 pixels. The gap keeps their expressions from flickering at the boundary.
 - A rocket or nearby explosion removes the ghost's collision immediately and plays the supplied death animation once. Touching a live ghost consumes one of three hearts from the first hit, with brief invulnerability and knockback.
+- Ghost death plays at twice the source speed, completing the whole dispersal in about 0.92 seconds.
 - Falling below the screen also consumes one heart. If hearts remain, the hero returns to the level with a short upward bounce and protection from ghosts; the height score is retained. Losing the third heart ends the run and opens the leaderboard.
 - The supplied night-city video loops behind the level at 540×960, 24 FPS. Pausing freezes the video and ghost animations; returning to START stops the video.
 - The HUD shows only the run's numeric height score at the top, using white bubble-letter digits with a black outline. Three hearts sit at the bottom center; transient messages appear above them.
@@ -48,6 +50,8 @@ godot --path .
 ## Asset layout
 
 Project art lives in `assets/ui`, `assets/characters`, `assets/weapons`, `assets/blocks`, `assets/effects` and `assets/backgrounds`. The title image is used directly as the interactive cover. `assets/backgrounds/night_city_loop.ogv` is the in-game video, with a matching poster while the first frame loads. The transparent in-game hero and separately rotating bazooka remain independent layers. Unused legacy currency artwork is excluded from Web exports.
+
+The hero is drawn through a textured outline that follows the boot soles, hiding the exhaust baked into the supplied sprite without redrawing the character. Springs use the outlined vector asset `assets/powerups/spring.svg`.
 
 The three `assets/blocks/reference_*.png` sheets are unchanged copies of the supplied platform artwork. `PLATFORM_ART` in `scripts/main.gd` selects 13 regions at their original proportions; `assets/blocks/platform_key.gdshader` removes their magenta background and edge spill at draw time.
 
