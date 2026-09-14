@@ -17,6 +17,8 @@ const SPRING_BOUNCE_SPEED := sqrt(2.0 * PLAYER_GRAVITY * PLATFORM_JUMP_HEIGHT * 
 const SPRING_SIZE := Vector2(60, 48)
 const STEERING_SPEED := 320.0
 const STEERING_ACCELERATION := 1800.0
+const ROCKET_SPEED := 690.0
+const ROCKET_TURN_SPEED := 10.0
 const GHOST_SPAWN_CHANCE := 0.38
 const GHOST_ALERT_DISTANCE := 200.0
 const GHOST_CALM_DISTANCE := 250.0
@@ -122,8 +124,6 @@ var camera_shake := 0.0
 var screen_flash := 0.0
 var last_shot_direction := Vector2.DOWN
 var aim_direction := Vector2.DOWN
-var last_aim_target := Vector2(270, 820)
-var aiming := false
 var visual_body_rotation := 0.0
 var visual_weapon_rotation := PI * 0.5
 var weapon_kick := 0.0
@@ -260,28 +260,12 @@ func _unhandled_input(event: InputEvent) -> void:
 	if screen == Screen.GAME_OVER:
 		return
 	if event is InputEventScreenTouch:
-		if screen == Screen.GAME:
-			if event.pressed:
-				begin_aim(event.position)
-			else:
-				end_aim(event.position)
-		elif event.pressed:
+		if event.pressed:
 			handle_press(event.position)
-		return
-	if event is InputEventScreenDrag and screen == Screen.GAME:
-		update_aim_target(event.position)
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-		if screen == Screen.GAME:
-			if event.pressed:
-				begin_aim(event.position)
-			else:
-				end_aim(event.position)
-		elif event.pressed:
+		if event.pressed:
 			handle_press(event.position)
-		return
-	if event is InputEventMouseMotion and screen == Screen.GAME and aiming:
-		update_aim_target(event.position)
 		return
 	if event is InputEventKey and event.pressed and not event.echo:
 		var key: int = event.physical_keycode if event.physical_keycode != 0 else event.keycode
@@ -298,31 +282,11 @@ func _unhandled_input(event: InputEvent) -> void:
 					handle_game_press(player_pos + Vector2(0, 260))
 		elif key == KEY_ESCAPE:
 			if screen == Screen.GAME:
-				aiming = false
 				paused = not paused
 
 
-func begin_aim(position: Vector2) -> void:
-	if paused:
-		handle_game_press(position)
-		return
-	if tutorial_visible:
-		tutorial_visible = false
-	aiming = true
-	update_aim_target(position)
-
-
-func end_aim(position: Vector2) -> void:
-	if not aiming or paused:
-		return
-	update_aim_target(position)
-	aiming = false
-	launch_player(position)
-
-
 func update_aim_target(position: Vector2) -> void:
-	last_aim_target = Vector2(clampf(position.x, 12, 528), clampf(position.y, 100, 944))
-	var solution := get_aim_solution(last_aim_target)
+	var solution := get_aim_solution(position)
 	aim_direction = solution["direction"]
 	if aim_direction.x < 0.0:
 		facing_left = true
@@ -336,7 +300,7 @@ func update_visual_controller(delta: float) -> void:
 	visual_weapon_rotation = lerp_angle(visual_weapon_rotation, desired_weapon_angle, weapon_weight)
 	var lean_limit := deg_to_rad(50.0)
 	var desired_body_rotation := clampf(aim_direction.x * deg_to_rad(42.0), -lean_limit, lean_limit)
-	if not aiming and shoot_timer <= 0.0:
+	if shoot_timer <= 0.0:
 		desired_body_rotation = clampf(player_vel.x / 720.0 * deg_to_rad(24.0), -deg_to_rad(28.0), deg_to_rad(28.0))
 	var body_weight := 1.0 - exp(-7.0 * delta)
 	visual_body_rotation = lerp_angle(visual_body_rotation, desired_body_rotation, body_weight)
@@ -378,17 +342,14 @@ func handle_menu_press(position: Vector2) -> void:
 
 
 func handle_game_press(position: Vector2) -> void:
-	if tutorial_visible:
-		tutorial_visible = false
-		launch_player(position)
-		return
 	if paused:
 		if Rect2(120, 440, 300, 62).has_point(position):
 			paused = false
 		elif Rect2(120, 520, 300, 62).has_point(position):
 			return_to_menu()
 		return
-	launch_player(position)
+	tutorial_visible = false
+	launch_player()
 
 
 func start_game() -> void:
@@ -412,12 +373,10 @@ func start_game() -> void:
 	screen_flash = 0.0
 	last_shot_direction = Vector2.DOWN
 	aim_direction = Vector2.DOWN
-	aiming = false
 	visual_body_rotation = 0.0
 	visual_weapon_rotation = PI * 0.5
 	facing_left = false
 	weapon_anchor_x = 22.0
-	last_aim_target = Vector2(270, 820)
 	blocks.clear()
 	ghosts.clear()
 	ghost_deaths.clear()
@@ -444,15 +403,30 @@ func return_to_menu() -> void:
 	save_profile()
 
 
-func launch_player(target: Vector2) -> void:
-	last_aim_target = target
-	if reload_timer > 0.0:
+func nearest_visible_ghost(origin: Vector2) -> Dictionary:
+	var nearest: Dictionary = {}
+	var nearest_distance := INF
+	for ghost in ghosts:
+		if not Rect2(Vector2.ZERO, VIEW_SIZE).has_point(ghost["pos"]):
+			continue
+		var distance: float = origin.distance_squared_to(ghost["pos"])
+		if distance < nearest_distance:
+			nearest = ghost
+			nearest_distance = distance
+	return nearest
+
+
+func launch_player(_tap_position: Vector2 = Vector2.ZERO) -> void:
+	if screen != Screen.GAME or paused or tilt_control.needs_permission() or reload_timer > 0.0:
 		return
+	var ghost := nearest_visible_ghost(player_pos)
+	var target: Vector2 = ghost["pos"] if not ghost.is_empty() else player_pos + Vector2(0, -260)
 	var solution := get_aim_solution(target)
 	var muzzle_position: Vector2 = solution["muzzle"]
 	var shot_direction: Vector2 = solution["direction"]
 	last_shot_direction = shot_direction
 	aim_direction = shot_direction
+	visual_weapon_rotation = shot_direction.angle()
 	if shot_direction.x < 0.0:
 		facing_left = true
 	elif shot_direction.x > 0.0:
@@ -461,7 +435,8 @@ func launch_player(target: Vector2) -> void:
 	shoot_timer = 0.20
 	weapon_kick = 1.0
 	screen_flash = 0.26
-	rockets.append({"pos": muzzle_position, "vel": shot_direction * 690.0, "life": 2.2, "trail": 0.0})
+	rockets.append({"pos": muzzle_position, "vel": shot_direction * ROCKET_SPEED, "life": 2.2, "trail": 0.0,
+		"homing": true, "target": ghost, "sweep_origin": get_weapon_pivot()})
 	spawn_muzzle(muzzle_position, shot_direction)
 
 
@@ -508,6 +483,8 @@ func shift_world(amount: float) -> void:
 		death["pos"] = death["pos"] + Vector2(0, amount)
 	for rocket in rockets:
 		rocket["pos"] = rocket["pos"] + Vector2(0, amount)
+		if rocket.has("sweep_origin"):
+			rocket["sweep_origin"] = rocket["sweep_origin"] + Vector2(0, amount)
 	for particle in particles:
 		particle["pos"] = particle["pos"] + Vector2(0, amount)
 	spawn_cursor_y += amount
@@ -608,6 +585,18 @@ func update_ghost_deaths(delta: float) -> void:
 func update_rockets(delta: float) -> void:
 	for index in range(rockets.size() - 1, -1, -1):
 		var rocket = rockets[index]
+		var previous_position: Vector2 = rocket.get("sweep_origin", rocket["pos"])
+		rocket.erase("sweep_origin")
+		if rocket.get("homing", false):
+			var target: Dictionary = rocket.get("target", {})
+			if target.is_empty() or not ghosts.has(target):
+				target = nearest_visible_ghost(rocket["pos"])
+				rocket["target"] = target
+			if not target.is_empty():
+				var desired: Vector2 = target["pos"] - rocket["pos"]
+				var current_angle: float = rocket["vel"].angle()
+				var turn := clampf(angle_difference(current_angle, desired.angle()), -ROCKET_TURN_SPEED * delta, ROCKET_TURN_SPEED * delta)
+				rocket["vel"] = Vector2.from_angle(current_angle + turn) * ROCKET_SPEED
 		rocket["pos"] = rocket["pos"] + rocket["vel"] * delta
 		rocket["life"] = float(rocket["life"]) - delta
 		rocket["trail"] = float(rocket["trail"]) + delta
@@ -617,13 +606,22 @@ func update_rockets(delta: float) -> void:
 			var trail_velocity := trail_direction * rng.randf_range(18, 60) + Vector2(rng.randf_range(-25, 25), rng.randf_range(-25, 25))
 			particles.append(make_particle(rocket["pos"] + trail_direction * 13, trail_velocity, Color("d7eef0"), rng.randf_range(4, 8), 0.42, -15))
 		var hit_ghost := false
+		var hit_position: Vector2 = rocket["pos"]
+		var first_hit_fraction := INF
+		var travel: Vector2 = rocket["pos"] - previous_position
+		var travel_length_squared := travel.length_squared()
 		for ghost in ghosts:
-			if rocket["pos"].distance_to(ghost["pos"]) < 32.0:
+			var fraction := 0.0
+			if travel_length_squared > 0.0:
+				fraction = clampf((ghost["pos"] - previous_position).dot(travel) / travel_length_squared, 0.0, 1.0)
+			var closest_point := previous_position + travel * fraction
+			if closest_point.distance_to(ghost["pos"]) < 32.0 and fraction < first_hit_fraction:
 				hit_ghost = true
-				break
+				first_hit_fraction = fraction
+				hit_position = closest_point
 		if hit_ghost:
-			spawn_explosion(rocket["pos"])
-			pop_ghosts_near(rocket["pos"], 60.0)
+			spawn_explosion(hit_position)
+			pop_ghosts_near(hit_position, 60.0)
 			camera_shake = 1.0
 			screen_flash = 0.38
 			rockets.remove_at(index)
@@ -839,8 +837,8 @@ func draw_menu() -> void:
 func draw_keyboard_help(top: float, show_start: bool = false) -> void:
 	draw_panel(Rect2(40, top, 460, 88), Color(0.02, 0.07, 0.12, 0.94), CYAN, 2, 10)
 	draw_label("СТРЕЛКИ / A D — ДВИЖЕНИЕ", Vector2(40, top + 28), 19, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 460, 1)
-	draw_label("ПРОБЕЛ — ВЫСТРЕЛ   ·   ESC — ПАУЗА", Vector2(40, top + 53), 16, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 460, 1)
-	var hint := "ENTER — НАЧАТЬ" if show_start else "ПРЫЖОК ОТ ПЛАТФОРМЫ — АВТОМАТИЧЕСКИ"
+	draw_label("КЛИК / ПРОБЕЛ — РАКЕТА   ·   ESC — ПАУЗА", Vector2(40, top + 53), 16, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 460, 1)
+	var hint := "ENTER — НАЧАТЬ" if show_start else "ПРЫЖКИ И ПРИЦЕЛИВАНИЕ — АВТОМАТИЧЕСКИ"
 	draw_label(hint, Vector2(40, top + 75), 13, PALE_CYAN, HORIZONTAL_ALIGNMENT_CENTER, 460, 1)
 
 
@@ -874,7 +872,6 @@ func draw_game() -> void:
 	for ghost in ghosts:
 		draw_enemy_ghost(ghost)
 	draw_ghost_deaths()
-	draw_aim_indicator()
 	for rocket in rockets:
 		var rocket_direction: Vector2 = rocket["vel"].normalized()
 		draw_set_transform(current_shake_offset + rocket["pos"], rocket_direction.angle() + PI * 0.5, Vector2.ONE)
@@ -891,29 +888,6 @@ func draw_game() -> void:
 		draw_tutorial()
 	elif paused:
 		draw_pause()
-
-
-func draw_aim_indicator() -> void:
-	if screen != Screen.GAME or paused or not aiming:
-		return
-	var target := Vector2(clampf(last_aim_target.x, 24, 516), clampf(last_aim_target.y, 120, 930))
-	var solution := get_aim_solution(target)
-	var muzzle: Vector2 = solution["muzzle"]
-	var delta := target - muzzle
-	if delta.length() < 8:
-		return
-	var direction := delta.normalized()
-	var length := minf(delta.length(), 270.0)
-	var color := CYAN if reload_timer <= 0.0 else Color("738a96")
-	for distance in range(22, int(length), 24):
-		var start := muzzle + direction * float(distance)
-		draw_line(start, start + direction * 11.0, color, 3)
-	var reticle := muzzle + direction * length
-	draw_arc(reticle, 14, 0, TAU, 20, color, 3)
-	draw_line(reticle + Vector2(-20, 0), reticle + Vector2(-8, 0), color, 3)
-	draw_line(reticle + Vector2(8, 0), reticle + Vector2(20, 0), color, 3)
-	draw_line(reticle + Vector2(0, -20), reticle + Vector2(0, -8), color, 3)
-	draw_line(reticle + Vector2(0, 8), reticle + Vector2(0, 20), color, 3)
 
 
 func draw_player() -> void:

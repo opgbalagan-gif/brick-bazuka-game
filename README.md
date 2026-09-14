@@ -18,14 +18,14 @@ godot --path .
 
 - Tilt the phone left/right to steer. Each run calibrates its initial position as neutral; a 3-degree dead zone filters hand tremors. Screen rotation and returning from a hidden tab recalibrate the Web sensor.
 - On iPhone, tap **ВКЛЮЧИТЬ НАКЛОН** and allow motion/orientation access. Play waits while this dialog is open. Sensor access requires HTTPS (or localhost on the same device); a plain HTTP LAN address will offer touch arrows instead. Denied or unavailable sensors also have touch-arrow controls.
-- On desktop, use **←/→** or physical **A/D** (**Ф/В** on a Russian layout) to move. The first movement key dismisses the introductory overlay and starts play. Keyboard hints appear on the title screen and before the first move; platform jumps remain automatic. Touch/mouse aiming and shooting remain independent of movement.
-- Hold touch/mouse, drag to aim, and release toward a ghost to fire.
+- On desktop, use **←/→** or physical **A/D** (**Ф/В** on a Russian layout) to move. The first movement key dismisses the introductory overlay and starts play. Keyboard hints appear on the title screen and before the first move; platform jumps remain automatic. Taps and clicks fire independently of movement.
+- Tap anywhere (or click on desktop) to fire immediately at the nearest visible ghost. No aiming or dragging is needed. Releasing or dragging does not fire again.
 - The bazooka aims faster than the body; the body smoothly leans toward the same shot direction.
-- The rocket spawns from the rotating muzzle and flies toward the aim point. Shooting does not change the hero's position, velocity or trajectory in any direction.
-- Enter or Space: start from the title screen; during play, fire straight down. Either key also resumes a paused run without firing.
+- Rockets track the selected ghost as it moves. If it disappears, they seek another visible ghost; with no ghosts, a shot flies upward. Shooting does not change the hero's position, velocity or trajectory in any direction.
+- Enter or Space: start from the title screen; during play, fire a homing rocket. Either key also resumes a paused run without firing.
 - Escape: pause.
 - The title screen has one active control: START. Its painted button launches the game.
-- On phones, before the first shot, the supplied white glove points down and loops a tap gesture without text. The first touch dismisses the hint and starts aiming.
+- On phones, before the first shot, the supplied white glove points down and loops a tap gesture without text. The first touch dismisses the hint and fires.
 
 ## Gameplay systems
 
@@ -75,5 +75,6 @@ The same step installs and versions `web/tilt-control.js` in the Web build befor
 ```powershell
 godot --headless --path . --script res://scripts/smoke_test.gd
 godot --headless --path . --script res://scripts/keyboard_test.gd
+godot --headless --path . --script res://scripts/homing_test.gd
 node scripts/test_tilt.mjs
 ```

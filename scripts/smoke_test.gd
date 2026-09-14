@@ -71,6 +71,7 @@ func _run() -> void:
 	game.player_pos = Vector2(270, 460)
 	game.player_vel = Vector2.ZERO
 	var shot_target: Vector2 = game.player_pos + Vector2(140, 240)
+	game.ghosts = [game.make_ghost(shot_target, 0)]
 	game.update_aim_target(shot_target)
 	assert(not game.facing_left, "A rightward shot must turn the hero to the right")
 	var solution: Dictionary = game.get_aim_solution(shot_target)
@@ -86,6 +87,7 @@ func _run() -> void:
 	game.reload_timer = 0.0
 	game.player_vel = Vector2.ZERO
 	var down_target: Vector2 = game.player_pos + Vector2(0, 260)
+	game.ghosts = [game.make_ghost(down_target, 0)]
 	game.update_aim_target(down_target)
 	var down_solution: Dictionary = game.get_aim_solution(down_target)
 	game.launch_player(down_target)
@@ -93,6 +95,7 @@ func _run() -> void:
 	game.reload_timer = 0.0
 	game.player_vel = Vector2.ZERO
 	var left_target: Vector2 = game.player_pos + Vector2(-140, 240)
+	game.ghosts = [game.make_ghost(left_target, 0)]
 	game.update_aim_target(left_target)
 	assert(game.facing_left, "A leftward shot must turn the hero to the left")
 	game.launch_player(left_target)
@@ -559,11 +562,10 @@ func _test_shots_preserve_motion(game) -> void:
 				world.player_pos = Vector2(270, 650)
 				world.player_vel = velocity
 			var target: Vector2 = game.player_pos + aim_offset
-			var expected_direction: Vector2 = game.get_aim_solution(target)["direction"]
-			game.begin_aim(target)
-			game.end_aim(target)
+			var expected_direction: Vector2 = game.get_aim_solution(game.player_pos + Vector2(0, -260))["direction"]
+			game.handle_game_press(target)
 			assert(game.player_vel == velocity and game.player_pos == control.player_pos, "Shots in every direction must preserve position and velocity")
-			assert(game.rockets.size() == 1 and game.rockets[0]["vel"].normalized().dot(expected_direction) > 0.99, "Rockets must still follow the aim point")
+			assert(game.rockets.size() == 1 and game.rockets[0]["vel"].normalized().dot(expected_direction) > 0.99, "With no ghosts, tapping anywhere must fire upward")
 			var velocity_after_shot: Vector2 = game.player_vel
 			game.launch_player(target)
 			assert(game.player_vel == velocity_after_shot and game.rockets.size() == 1, "Reload must prevent extra rockets without changing movement")
