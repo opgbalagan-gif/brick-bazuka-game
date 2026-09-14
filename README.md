@@ -34,8 +34,9 @@ godot --path .
 - A spring appears on the third opening platform and then every 5–7 platforms. Landing on it consumes it and doubles jump height for 8 seconds, including subsequent ordinary platform bounces. Another spring refreshes the duration; pausing freezes it. A spring icon and shrinking green bar show the remaining boost.
 - Physics/collision stays axis-aligned; only the character and weapon visual layers rotate.
 - The vertical world is generated continuously above the player, with brick structures positioned for downward and diagonal shots.
-- Single platforms are spaced 250–310 pixels apart, leaving roughly 3–4 visible at once. Brown brick, stone, cracked and slime-covered variants use the supplied artwork.
-- All generated platforms glide left and right with smooth turns, independent phases, 50–110 pixels of travel each way and peak speeds of 35–60 pixels per second. They stay fully inside the screen. Springs and collision areas follow the platforms; pausing, the introductory hint and sensor permission freeze their motion. The first platform begins under the hero.
+- Safe platforms are 110–160 pixels wide, about a quarter smaller than before, and retain their artwork's proportions. Rows stay 250–310 pixels apart, leaving roughly 3–4 visible at once. Brown brick, stone, cracked and slime-covered variants use the supplied artwork.
+- After the first four safe rows, a fake platform appears beside an ordinary platform every 3–5 rows (spring rows postpone it). Its three loose, cracked stone slabs crumble immediately on landing: the hero keeps falling, including during a spring boost. Falling rubble marks the collapse. Each fake is an extra decoy with no spring; a safe platform remains beside it, moving at the same speed with a fixed 48-pixel gap. Rockets pass through decoys too.
+- Generated platform rows glide left and right with smooth turns, independent phases, 50–110 pixels of travel each way and peak speeds of 35–60 pixels per second. Rows with decoys have less travel when needed to keep both platforms inside the screen. Springs and collision areas follow the platforms; pausing, the introductory hint and sensor permission freeze their motion. The first platform begins under the hero.
 - Rockets pass through all platforms and springs, hitting only ghosts. Their explosions also leave platforms intact. Landing still damages platforms: reinforced stone takes two landings and cracks after the first; destroyed bricks create debris.
 - Ghost enemies use the supplied videos as transparent animated sprites: calm while distant, angry within 200 pixels of the hero, and calm again beyond 250 pixels. The gap keeps their expressions from flickering at the boundary.
 - A rocket or nearby explosion removes the ghost's collision immediately and plays the supplied death animation once. Touching a live ghost consumes one of three hearts from the first hit, with brief invulnerability and knockback.
@@ -76,5 +77,6 @@ The same step installs and versions `web/tilt-control.js` in the Web build befor
 godot --headless --path . --script res://scripts/smoke_test.gd
 godot --headless --path . --script res://scripts/keyboard_test.gd
 godot --headless --path . --script res://scripts/homing_test.gd
+godot --headless --path . --script res://scripts/fake_platform_test.gd
 node scripts/test_tilt.mjs
 ```

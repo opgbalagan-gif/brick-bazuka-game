@@ -60,7 +60,9 @@ func _run() -> void:
 	for row in 50:
 		var before: int = game.blocks.size()
 		game.spawn_block(-row * 280.0)
-		assert(game.blocks.size() == before + 1, "Each generated row must contain exactly one platform")
+		var new_blocks: Array = game.blocks.slice(before)
+		assert(new_blocks.size() >= 1 and new_blocks.size() <= 2, "A row must contain a safe platform and at most one decoy")
+		assert(new_blocks.filter(func(item): return not item.get("fake", false)).size() == 1, "Every generated row must retain a safe landing")
 		var block: Dictionary = game.blocks.back()
 		var source: Rect2 = game.PLATFORM_ART[block["skin"]]["region"]
 		assert(absf(block["size"].aspect() - source.size.aspect()) < 0.01, "Platform artwork must retain its proportions")
@@ -395,10 +397,10 @@ func _test_platform_jump(game) -> void:
 			game.tutorial_visible = false
 			game.ghosts.clear()
 			game.spawn_cursor_y = -100000.0
-			var next_platform := {"pos": Vector2(170, 760 - gap), "size": Vector2(200, 60), "skin": 5, "kind": 1, "hp": 2, "max_hp": 2,
-				"motion_center": 170.0, "motion_amplitude": 70.0, "motion_phase": 0.0, "motion_rate": 0.6}
+			var next_platform := {"pos": Vector2(205, 760 - gap), "size": Vector2(130, 44), "skin": 5, "kind": 1, "hp": 2, "max_hp": 2,
+				"motion_center": 205.0, "motion_amplitude": 70.0, "motion_phase": 0.0, "motion_rate": 0.6}
 			game.blocks = [
-				{"pos": Vector2(170, 760), "size": Vector2(200, 60), "skin": 0, "kind": 0, "hp": 1, "max_hp": 1},
+				{"pos": Vector2(205, 760), "size": Vector2(130, 44), "skin": 0, "kind": 0, "hp": 1, "max_hp": 1},
 				next_platform
 			]
 			game.player_pos = Vector2(270, 700)

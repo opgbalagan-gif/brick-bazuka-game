@@ -118,6 +118,7 @@ var damage_flash := 0.0
 var health := MAX_HEALTH
 var spring_boost_timer := 0.0
 var platforms_until_spring := 2
+var platforms_until_fake := 4
 var hero_body_polygon := PackedVector2Array()
 var hero_body_uvs := PackedVector2Array()
 var camera_shake := 0.0
@@ -192,6 +193,14 @@ func draw_platforms() -> void:
 		var art: Dictionary = PLATFORM_ART[int(block.get("skin", 0))]
 		if int(block["hp"]) < int(block["max_hp"]) and art.has("damaged"):
 			art = PLATFORM_ART[int(art["damaged"])]
+		if block.get("fake", false):
+			# Separate the cracked artwork into loose, uneven slabs.
+			var region: Rect2 = art["region"]
+			for piece in 3:
+				var part := Rect2(region.position + Vector2(region.size.x * piece / 3.0, 0), Vector2(region.size.x / 3.0, region.size.y))
+				var target := Rect2(block["pos"] + Vector2(block["size"].x * piece / 3.0, 2 if piece == 1 else 0), Vector2(block["size"].x / 3.0 - 2, block["size"].y))
+				platform_layer.draw_texture_rect_region(PLATFORM_SHEETS[int(art["sheet"])], target, part)
+			continue
 		platform_layer.draw_texture_rect_region(PLATFORM_SHEETS[int(art["sheet"])], Rect2(block["pos"], block["size"]), art["region"])
 
 
@@ -368,6 +377,7 @@ func start_game() -> void:
 	health = MAX_HEALTH
 	spring_boost_timer = 0.0
 	platforms_until_spring = 2
+	platforms_until_fake = 4
 	weapon_kick = 0.0
 	camera_shake = 0.0
 	screen_flash = 0.0
@@ -500,12 +510,23 @@ func spawn_block(y_position: float) -> void:
 	var skin := rng.randi_range(0, PLATFORM_ART.size() - 1)
 	var art: Dictionary = PLATFORM_ART[skin]
 	var region: Rect2 = art["region"]
-	var width := rng.randf_range(150, 185)
+	var width := rng.randf_range(110, 135)
 	if region.size.x / region.size.y > 3.0:
-		width = rng.randf_range(185, 215)
+		width = rng.randf_range(135, 160)
 	var size := Vector2(width, width * region.size.y / region.size.x)
-	var amplitude := rng.randf_range(50.0, 110.0)
-	var center_x := rng.randf_range(22.0 + amplitude, VIEW_SIZE.x - 22.0 - width - amplitude)
+	var has_spring := platforms_until_spring <= 0
+	platforms_until_spring = rng.randi_range(4, 6) if has_spring else platforms_until_spring - 1
+	# Decoys supplement the climbable route; they never replace a safe row.
+	var has_fake := platforms_until_fake <= 0 and not has_spring
+	platforms_until_fake = rng.randi_range(2, 4) if has_fake else maxi(0, platforms_until_fake - 1)
+	var fake_width := rng.randf_range(85, 110) if has_fake else 0.0
+	var pair_gap := 48.0 if has_fake else 0.0
+	var row_width := width + fake_width + pair_gap
+	var max_amplitude := minf(110.0, (VIEW_SIZE.x - 44.0 - row_width) * 0.5)
+	var amplitude := rng.randf_range(50.0, max_amplitude)
+	var row_center := rng.randf_range(22.0 + amplitude, VIEW_SIZE.x - 22.0 - row_width - amplitude)
+	var fake_left := has_fake and rng.randf() < 0.5
+	var center_x := row_center + (fake_width + pair_gap if fake_left else 0.0)
 	var phase := rng.randf_range(0.0, TAU)
 	# Keep the first moving platform under the hero for the opening bounce.
 	if blocks.is_empty() and is_equal_approx(y_position, 760.0):
@@ -514,9 +535,15 @@ func spawn_block(y_position: float) -> void:
 	var x := center_x + sin(phase) * amplitude
 	var motion_rate := rng.randf_range(PLATFORM_SPEED_MIN, PLATFORM_SPEED_MAX) / amplitude
 	var hp := int(art.get("hp", 1))
-	var has_spring := platforms_until_spring <= 0
-	platforms_until_spring = rng.randi_range(4, 6) if has_spring else platforms_until_spring - 1
+	if has_fake:
+		var fake_region: Rect2 = PLATFORM_ART[7]["region"]
+		var fake_center := row_center if fake_left else row_center + width + pair_gap
+		blocks.append({"pos": Vector2(fake_center + sin(phase) * amplitude, y_position),
+			"size": Vector2(fake_width, fake_width * fake_region.size.y / fake_region.size.x), "skin": 7,
+			"kind": 1, "hp": 1, "max_hp": 1, "spring": false, "fake": true,
+			"motion_center": fake_center, "motion_amplitude": amplitude, "motion_phase": phase, "motion_rate": motion_rate})
 	blocks.append({"pos": Vector2(x, y_position), "size": size, "skin": skin, "kind": int(art["kind"]), "hp": hp, "max_hp": hp, "spring": has_spring,
+		"fake": false,
 		"motion_center": center_x, "motion_amplitude": amplitude, "motion_phase": phase, "motion_rate": motion_rate})
 	# Keep spring takeoffs clear; ordinary rows can have a drifting ghost above a brick.
 	if not has_spring and y_position < 520.0 and rng.randf() < GHOST_SPAWN_CHANCE:
@@ -666,6 +693,12 @@ func check_player_block_collisions() -> void:
 	for index in range(blocks.size() - 1, -1, -1):
 		var block = blocks[index]
 		var block_rect := Rect2(block["pos"], block["size"])
+		if block.get("fake", false):
+			if feet.intersects(block_rect) and player_pos.y < block_rect.position.y + 16:
+				blocks.remove_at(index)
+				smashed_total += 1
+				spawn_fake_crumble(block_rect)
+			continue
 		if block.get("spring", false):
 			var spring := spring_rect(block)
 			if feet.intersects(spring) and player_pos.y < spring.position.y + 16:
@@ -772,6 +805,13 @@ func spawn_brick_burst(position: Vector2, kind: int) -> void:
 func spawn_hit_sparks(position: Vector2) -> void:
 	for i in 7:
 		particles.append(make_particle(position, Vector2(rng.randf_range(-150, 150), rng.randf_range(-170, 20)), WHITE if i % 2 == 0 else GOLD, rng.randf_range(3, 7), 0.35, 250))
+
+
+func spawn_fake_crumble(rect: Rect2) -> void:
+	var colors := [Color("6a7480"), Color("b5c0c9"), Color("343b49")]
+	for piece in 18:
+		var position := rect.position + Vector2(rng.randf_range(0, rect.size.x), rng.randf_range(0, rect.size.y * 0.8))
+		particles.append(make_particle(position, Vector2(rng.randf_range(-75, 75), rng.randf_range(40, 140)), colors[piece % 3], rng.randf_range(3, 8), rng.randf_range(0.4, 0.7), PLAYER_GRAVITY))
 
 
 func spawn_ghost_pop(position: Vector2) -> void:
