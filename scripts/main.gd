@@ -46,6 +46,7 @@ const SCORE_DIGITS_TEX := preload("res://assets/ui/score_digits.svg")
 const TAP_GLOVE_TEX := preload("res://assets/ui/tap_glove_down.png")
 const LEADERBOARD_UI := preload("res://scripts/leaderboard.gd")
 const TILT_CONTROL := preload("res://scripts/tilt_control.gd")
+const TOUCH_CONTROL := preload("res://scripts/touch_control.gd")
 const BAZOOKA_BODY_TEX := preload("res://assets/weapons/bazooka_body.png")
 const ROCKET_TEX := preload("res://assets/weapons/rocket.svg")
 const SPRING_TEX := preload("res://assets/powerups/spring.svg")
@@ -160,6 +161,7 @@ var background_layer: Control
 var background_video: VideoStreamPlayer
 
 var cta_rect := Rect2(151, 754, 238, 90)
+var touch_control: Node
 
 
 func _ready() -> void:
@@ -174,6 +176,9 @@ func _ready() -> void:
 		mask_polygon.append((point - Vector2(638, 266)) * Vector2(0.14, 0.14))
 	tilt_control = TILT_CONTROL.new()
 	add_child(tilt_control)
+	touch_control = TOUCH_CONTROL.new()
+	touch_control.shot_requested.connect(launch_player)
+	add_child(touch_control)
 	setup_video_background()
 	setup_platform_layer()
 	leaderboard = LEADERBOARD_UI.new()
@@ -268,6 +273,8 @@ func sync_video_background() -> void:
 
 func _process(delta: float) -> void:
 	sync_video_background()
+	if screen == Screen.GAME and tutorial_visible and not paused and not tilt_control.needs_permission() and absf(tilt_control.read_axis()) > 0.05:
+		tutorial_visible = false
 	menu_time += delta
 	if tutorial_visible and not paused:
 		tutorial_time += delta
@@ -281,15 +288,26 @@ func _process(delta: float) -> void:
 	camera_shake = maxf(0.0, camera_shake - delta * 3.8)
 	screen_flash = maxf(0.0, screen_flash - delta * 4.5)
 	if screen == Screen.GAME and not paused and not tutorial_visible and not tilt_control.needs_permission():
+		touch_control.advance(delta)
 		update_game(delta)
+	elif screen != Screen.GAME or paused or tilt_control.needs_permission():
+		touch_control.reset()
 	queue_redraw()
+
+
+func _notification(what: int) -> void:
+	if what in [NOTIFICATION_WM_WINDOW_FOCUS_OUT, NOTIFICATION_APPLICATION_FOCUS_OUT] and is_instance_valid(touch_control):
+		touch_control.reset()
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	if screen == Screen.GAME_OVER:
 		return
-	if event is InputEventScreenTouch:
-		if event.pressed:
+	if event is InputEventScreenTouch or event is InputEventScreenDrag:
+		if screen == Screen.GAME and not paused and not tilt_control.needs_permission():
+			tutorial_visible = false
+			touch_control.handle_event(event)
+		elif event is InputEventScreenTouch and event.pressed:
 			handle_press(event.position)
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
@@ -312,6 +330,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif key == KEY_ESCAPE:
 			if screen == Screen.GAME:
 				paused = not paused
+				touch_control.reset()
 
 
 func update_aim_target(position: Vector2) -> void:
@@ -377,6 +396,7 @@ func handle_game_press(position: Vector2) -> void:
 
 
 func start_game() -> void:
+	touch_control.reset()
 	leaderboard.start_run()
 	tilt_control.start()
 	screen = Screen.GAME
@@ -424,6 +444,7 @@ func start_game() -> void:
 
 
 func return_to_menu() -> void:
+	touch_control.reset()
 	leaderboard.dismiss()
 	tilt_control.stop()
 	screen = Screen.MENU
@@ -485,7 +506,8 @@ func update_game(delta: float) -> void:
 			contact_cooldown = maxf(contact_cooldown, 0.6)
 	else:
 		player_vel.y += PLAYER_GRAVITY * delta
-	player_vel.x = move_toward(player_vel.x, tilt_control.read_axis() * STEERING_SPEED, STEERING_ACCELERATION * delta)
+	var steering: float = touch_control.axis if touch_control.is_steering() else tilt_control.read_axis()
+	player_vel.x = move_toward(player_vel.x, steering * STEERING_SPEED, STEERING_ACCELERATION * delta)
 	player_pos += player_vel * delta
 	player_pos.x = wrapf(player_pos.x, 0.0, WORLD_SIZE.x)
 	if absf(player_pos.x - previous_player_pos.x) > WORLD_SIZE.x * 0.5:
@@ -898,6 +920,7 @@ func finish_run() -> void:
 	if screen == Screen.GAME_OVER:
 		return
 	screen = Screen.GAME_OVER
+	touch_control.reset()
 	tilt_control.stop()
 	best_meters = maxi(best_meters, int(height_meters))
 	save_profile()
@@ -1135,6 +1158,9 @@ func draw_tutorial() -> void:
 	if tilt_control.uses_keyboard():
 		draw_keyboard_help(735.0)
 		return
+	draw_panel(Rect2(35, 555, 470, 82), Color(0.02, 0.07, 0.12, 0.94), CYAN, 2, 10)
+	draw_label("УДЕРЖИВАЙ ПАЛЕЦ ИЛИ ВЕДИ В СТОРОНУ", Vector2(35, 587), 17, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 470, 1)
+	draw_label("КОРОТКИЙ ТАП — ВЫСТРЕЛ", Vector2(35, 617), 17, PALE_CYAN, HORIZONTAL_ALIGNMENT_CENTER, 470, 1)
 	var phase := fmod(tutorial_time, 1.65) / 1.65
 	var press := smoothstep(0.10, 0.40, phase) * (1.0 - smoothstep(0.52, 0.84, phase))
 	var tap_point := Vector2(270, 849)

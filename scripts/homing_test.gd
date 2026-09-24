@@ -20,6 +20,9 @@ func _tap(game, position: Vector2, pressed: bool = true) -> void:
 	event.position = position
 	event.pressed = pressed
 	game._unhandled_input(event)
+	if pressed:
+		event.pressed = false
+		game._unhandled_input(event)
 
 
 func _run() -> void:
@@ -41,7 +44,7 @@ func _run() -> void:
 			game.tutorial_visible = true
 			# Tapping directly on the farther ghost must still auto-select the nearest to the hero.
 			_tap(game, distant["pos"])
-			assert(game.rockets.size() == 1 and not game.tutorial_visible, "The first touch must fire immediately without waiting for release")
+			assert(game.rockets.size() == 1 and not game.tutorial_visible, "A short tap must fire once on release and dismiss the tutorial")
 			assert(game.rockets[0]["target"] == target, "The nearest visible ghost must be selected regardless of the tap position")
 			var direction: Vector2 = game.rockets[0]["vel"].normalized()
 			assert(direction.is_equal_approx(Vector2.DOWN), "Even with a ghost above, the rocket must launch downward")

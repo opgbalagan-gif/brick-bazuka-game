@@ -1,16 +1,17 @@
-/* Phone tilt input for the Godot Web build. No sensor data leaves this page. */
+/* Optional phone tilt and touch buttons. Canvas gestures are handled in Godot. */
 (() => {
   'use strict';
   const DEAD_ZONE = 3;
   const FULL_TILT = 22;
   const mobile = navigator.maxTouchPoints > 0;
-  let active = false, listening = false, granted = false, buttonsOnly = false;
+  let active = false, listening = false, granted = false, buttonsOnly = true;
   let status = 'idle', axis = 0, buttonAxis = 0, neutral = null;
   let sampleTimer = null, panelOpen = false;
   let permissionAttempt = 0;
 
   const style = document.createElement('style');
   style.textContent = `
+    #canvas {touch-action:none}
     #brick-tilt-panel {position:fixed;inset:0;z-index:30;display:none;align-items:center;justify-content:center;background:#000b;font-family:Arial,sans-serif;color:#f5f8ee;padding:24px;box-sizing:border-box}
     #brick-tilt-card {width:320px;max-width:100%;padding:24px;border:2px solid #80df41;border-radius:14px;background:#071f38;text-align:center;box-sizing:border-box}
     #brick-tilt-message {font-size:19px;line-height:1.4;margin:0 0 18px}
@@ -18,6 +19,7 @@
     #brick-tilt-panel button.secondary {background:#12334b;border-color:#355c70}
     .brick-tilt-arrow {position:fixed;bottom:18px;z-index:25;width:58px;height:58px;border:2px solid #80df41;border-radius:12px;background:#071f38dd;color:#f5f8ee;font:30px Arial;touch-action:none;user-select:none;-webkit-user-select:none;display:none}
     #brick-tilt-left {left:12px} #brick-tilt-right {right:12px}
+    #brick-control-mode {position:fixed;right:12px;bottom:86px;z-index:25;min-height:38px;padding:0 12px;border:1px solid #80df41;border-radius:9px;background:#071f38dd;color:#f5f8ee;font:13px Arial;touch-action:manipulation;display:none}
   `;
   document.head.appendChild(style);
   const panel = document.createElement('div');
@@ -31,11 +33,14 @@
   const enable = document.createElement('button');
   enable.textContent = 'ВКЛЮЧИТЬ НАКЛОН';
   const skip = document.createElement('button');
-  skip.textContent = 'ИГРАТЬ КНОПКАМИ';
+  skip.textContent = 'ИГРАТЬ ПАЛЬЦЕМ';
   skip.className = 'secondary';
   card.append(message, enable, skip);
   panel.appendChild(card);
   document.body.appendChild(panel);
+  const mode = document.createElement('button');
+  mode.id = 'brick-control-mode';
+  document.body.appendChild(mode);
 
   const arrows = [-1, 1].map(direction => {
     const button = document.createElement('button');
@@ -66,9 +71,9 @@
     const messages = {
       permission: 'Разреши наклон телефона для движения влево и вправо.',
       requesting: 'Ожидаем разрешение…',
-      denied: 'Доступ к наклону не разрешён. Можно играть кнопками.',
-      unavailable: 'Датчик наклона недоступен. Можно играть кнопками.',
-      insecure: 'Для наклона открой игру по HTTPS. Здесь можно играть кнопками.'
+      denied: 'Доступ к наклону не разрешён. Можно управлять пальцем и свайпом.',
+      unavailable: 'Датчик наклона недоступен. Можно управлять пальцем и свайпом.',
+      insecure: 'Для наклона открой игру по HTTPS. Здесь можно управлять пальцем и свайпом.'
     };
     message.textContent = messages[status] || messages.permission;
     enable.disabled = status === 'requesting';
@@ -76,6 +81,9 @@
     arrows.forEach(button => {
       button.style.display = active && mobile && !panelOpen && status !== 'active' ? 'block' : 'none';
     });
+    mode.style.display = active && mobile && !panelOpen ? 'block' : 'none';
+    mode.textContent = buttonsOnly ? 'НАКЛОН' : 'ПАЛЕЦ';
+    mode.setAttribute('aria-label', buttonsOnly ? 'Переключить на управление наклоном' : 'Переключить на управление пальцем');
   }
 
   function orientation(event) {
@@ -128,7 +136,16 @@
     if (buttonsOnly) {
       status = 'buttons';
       panelOpen = false;
-    } else if (!window.isSecureContext) {
+      render();
+    } else {
+      startTilt();
+    }
+  }
+
+  function startTilt() {
+    buttonsOnly = false;
+    recenter();
+    if (!window.isSecureContext) {
       status = 'insecure';
       panelOpen = mobile;
     } else if (typeof window.DeviceOrientationEvent === 'undefined') {
@@ -169,7 +186,7 @@
       render();
     }
   });
-  skip.addEventListener('click', () => {
+  function useTouch() {
     permissionAttempt++;
     buttonsOnly = true;
     stopListening();
@@ -177,6 +194,12 @@
     status = 'buttons';
     panelOpen = false;
     render();
+  }
+  skip.addEventListener('click', useTouch);
+  mode.addEventListener('click', () => {
+    if (!active) return;
+    if (buttonsOnly) startTilt();
+    else useTouch();
   });
   document.addEventListener('visibilitychange', recenter);
   window.addEventListener('blur', recenter);

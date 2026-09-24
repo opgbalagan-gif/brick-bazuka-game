@@ -16,21 +16,22 @@ godot --path .
 
 ## Controls
 
-- Tilt the phone left/right to steer. Each run calibrates its initial position as neutral; a 3-degree dead zone filters hand tremors. Screen rotation and returning from a hidden tab recalibrate the Web sensor.
-- On iPhone, tap **ВКЛЮЧИТЬ НАКЛОН** and allow motion/orientation access. Play waits while this dialog is open. Sensor access requires HTTPS (or localhost on the same device); a plain HTTP LAN address will offer touch arrows instead. Denied or unavailable sensors also have touch-arrow controls.
+- Phones start with finger controls and no sensor permission prompt. Hold the left or right half for 0.18 seconds to steer, or drag horizontally to steer immediately. Drag distance controls speed; sliding back across the starting point reverses direction. Release to brake. The corner arrow buttons also move the hero.
+- A short tap fires once on release at the nearest visible ghost. Holds and swipes do not shoot. A second finger can tap to shoot while the first keeps steering. Canceled touches, focus loss, pause, results and restart clear gesture state.
+- The **НАКЛОН** button switches to optional phone tilt. On iPhone, then tap **ВКЛЮЧИТЬ НАКЛОН** and allow motion/orientation access. **ПАЛЕЦ** switches back. Each run calibrates the initial phone position as neutral; a 3-degree dead zone filters hand tremors. Rotation and returning from a hidden tab recalibrate the sensor. Sensor access requires HTTPS (or localhost); finger controls work without sensor support or permission.
 - On desktop, use **←/→** or physical **A/D** (**Ф/В** on a Russian layout) to move. The first movement key dismisses the introductory overlay and starts play. Keyboard hints appear on the title screen and before the first move; platform jumps remain automatic. Taps and clicks fire independently of movement.
-- Tap anywhere (or click on desktop) to fire immediately at the nearest visible ghost. No aiming or dragging is needed. Releasing or dragging does not fire again.
+- Desktop clicks fire immediately at the nearest visible ghost. Touch taps fire on release so the same surface can distinguish swipes and holds. No manual aiming is needed.
 - The hero faces horizontal travel and keeps the last facing during vertical flight. Lean follows movement; shooting never reverses the body. The bazooka aims independently behind the hero so it cannot cover the face.
 - Rockets leave the bazooka's downward-facing muzzle, clear the barrel for 0.08 seconds, then track the selected ghost as it moves. If it disappears, they seek another visible ghost; with no ghosts, a shot continues straight down. Shooting does not change the hero's position, velocity or trajectory in any direction.
 - Enter or Space: start from the title screen; during play, fire a homing rocket. Either key also resumes a paused run without firing.
 - Escape: pause.
 - The title screen has one active control: START. Its painted button launches the game.
-- On phones, before the first shot, the supplied white glove points down and loops a tap gesture without text. The first touch dismisses the hint and fires.
+- On phones, the introductory glove and short hint explain holding, swiping and tapping. The first touch or arrow-button movement dismisses the hint and starts play.
 
 ## Gameplay systems
 
 - The game world is shown at 80% scale: a 675×1200 play area fits inside the 540×960 portrait view. Hero, bazooka, platforms, ghosts, pickups and effects share the same transform and collision coordinates. Score, masks, menus, touch controls and name input retain their original readable size. Camera scrolling, wrapping, targeting, respawns and cleanup use the expanded world bounds.
-- Tilt/keyboard steering controls horizontal movement with smooth acceleration and braking. Gravity and platform bounces control vertical movement. Shots apply no jump impulse, horizontal correction or recoil to the hero; only the weapon plays a firing animation.
+- Touch, tilt and keyboard steering control horizontal movement with smooth acceleration and braking. Active finger steering takes priority over tilt. Gravity and platform bounces control vertical movement. Shots apply no jump impulse, horizontal correction or recoil to the hero; only the weapon plays a firing animation.
 - Crossing either side of the screen brings the hero in from the opposite side, preserving speed and the current jump without losing a life.
 - Each spring is consumed on landing and gives exactly one double-height jump (about 740 pixels). The next ordinary platform gives the normal 370-pixel jump, even immediately afterward. A new spring gives a new single high jump. The first spring is on the third opening platform; later springs become rarer as the run's height increases. They start 5–7 safe rows apart, with two more rows of spacing for each 500 height points: 9–11 rows at 1,000 points and 17–19 at 3,000. Restarting resets this spacing. There is no timed boost or boost bar.
 - Physics/collision stays axis-aligned; only the character and weapon visual layers rotate.
@@ -81,6 +82,7 @@ godot --headless --path . --script res://scripts/keyboard_test.gd
 godot --headless --path . --script res://scripts/homing_test.gd
 godot --headless --path . --script res://scripts/fake_platform_test.gd
 godot --headless --path . --script res://scripts/gameplay_fixes_test.gd
+godot --headless --path . --script res://scripts/touch_control_test.gd
 node scripts/test_name_input.mjs
 node scripts/test_tilt.mjs
 ```

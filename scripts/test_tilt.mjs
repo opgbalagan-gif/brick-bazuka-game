@@ -41,6 +41,7 @@ function browser({mobile = true, secure = true, supported = true, permission} = 
   return {
     input: window.BrickTilt, window, document, screen, elements,
     enable: () => card.children[1].fire('click'), skip: () => card.children[2].fire('click'),
+    toggle: () => elements.get('brick-control-mode').fire('click'),
     sample: (gamma, beta = 30) => window.fire('deviceorientation', {gamma, beta}),
     timeout: () => {for (const fn of [...timers.values()]) fn();},
     permissionCalls: () => permissionCalls
@@ -51,6 +52,10 @@ const flush = async () => {await Promise.resolve(); await Promise.resolve();};
 const android = browser();
 android.input.start();
 assert.equal(android.input.needs_permission(), false);
+assert.equal(android.input.get_status(), 'buttons', 'Phones must start in touch mode without a sensor prompt');
+android.sample(0); android.sample(22);
+assert.equal(android.input.read_axis(), 0, 'Touch mode must ignore sensor movement');
+android.toggle();
 android.sample(null);
 assert.equal(android.input.read_axis(), 0, 'Missing sensor data must not move the hero');
 android.sample(8);
@@ -82,6 +87,8 @@ assert.equal(android.input.read_axis(), 0, 'Each run starts with a fresh neutral
 
 const iphone = browser({permission: () => Promise.resolve('granted')});
 iphone.input.start();
+assert.equal(iphone.input.needs_permission(), false, 'iPhone touch play must not require motion permission');
+iphone.toggle();
 assert(iphone.input.needs_permission());
 assert.equal(iphone.permissionCalls(), 0, 'Do not request iPhone access outside a button click');
 iphone.enable();
@@ -94,7 +101,7 @@ iphone.input.stop(); iphone.input.start();
 assert.equal(iphone.permissionCalls(), 1, 'Granted access is reused between runs');
 
 const denied = browser({permission: () => Promise.resolve('denied')});
-denied.input.start(); denied.enable(); await flush();
+denied.input.start(); denied.toggle(); denied.enable(); await flush();
 assert.equal(denied.input.get_status(), 'denied');
 denied.skip();
 assert.equal(denied.input.needs_permission(), false);
@@ -106,19 +113,20 @@ denied.input.stop(); assert.equal(left.style.display, 'none');
 
 let resolvePermission;
 const pending = browser({permission: () => new Promise(resolve => {resolvePermission = resolve;})});
-pending.input.start(); pending.enable(); pending.skip();
+pending.input.start(); pending.toggle(); pending.enable(); pending.skip();
 resolvePermission('denied'); await flush();
 assert.equal(pending.input.get_status(), 'buttons', 'A late permission result must not reopen the dialog after skipping');
 
 for (const options of [{secure: false}, {supported: false}]) {
   const unavailable = browser(options);
-  unavailable.input.start(); assert(unavailable.input.needs_permission());
+  unavailable.input.start(); assert.equal(unavailable.input.needs_permission(), false);
+  unavailable.toggle(); assert(unavailable.input.needs_permission());
   unavailable.skip(); assert.equal(unavailable.input.needs_permission(), false);
   unavailable.elements.get('brick-tilt-right').fire('pointerdown');
   assert.equal(unavailable.input.read_axis(), 1, 'Buttons work when sensor access is unavailable');
 }
 const silent = browser();
-silent.input.start(); silent.timeout();
+silent.input.start(); silent.toggle(); silent.timeout();
 assert.equal(silent.input.get_status(), 'unavailable', 'No sensor events must offer fallback controls');
 const desktop = browser({mobile: false});
 assert.equal(desktop.input.is_mobile(), false, 'Desktop builds must select the keyboard tutorial');
@@ -126,4 +134,12 @@ assert.equal(android.input.is_mobile(), true, 'Phones must retain the touch tuto
 desktop.input.start(); desktop.timeout();
 assert.equal(desktop.input.needs_permission(), false, 'Desktop keyboard play must never be blocked by sensor prompts');
 assert.equal(desktop.elements.get('brick-tilt-left').style.display, 'none');
-console.log('TILT_WEB_TEST_OK calibration dead_zone left_right rotation permission fallback visibility lifecycle');
+assert.equal(desktop.elements.get('brick-control-mode').style.display, 'none');
+iphone.sample(0); iphone.sample(22);
+iphone.toggle();
+assert.equal(iphone.input.get_status(), 'buttons');
+assert.equal(iphone.input.read_axis(), 0, 'Switching back to touch must clear tilt input');
+assert.equal(iphone.window.listeners.get('deviceorientation').size, 0, 'Touch mode must stop sensors');
+iphone.input.stop(); iphone.input.start();
+assert.equal(iphone.input.get_status(), 'buttons', 'The selected touch mode must survive a restart');
+console.log('TILT_WEB_TEST_OK touch_default mode_switch calibration dead_zone left_right rotation permission fallback visibility lifecycle');
