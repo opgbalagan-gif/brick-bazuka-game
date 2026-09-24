@@ -76,12 +76,12 @@ func _run() -> void:
 	game.ghosts = [game.make_ghost(shot_target, 0)]
 	game.update_aim_target(shot_target)
 	assert(not game.facing_left, "Firing must preserve the idle hero's facing")
-	var solution: Dictionary = game.get_aim_solution(shot_target)
+	var solution: Dictionary = game.get_aim_solution(game.get_weapon_pivot() + Vector2.DOWN * 260.0)
 	var expected_shot_direction: Vector2 = solution["direction"]
 	game.launch_player(shot_target)
 	assert(game.rockets.size() == 1, "A shot must create one rocket")
 	assert(game.rockets[0]["pos"].distance_to(solution["muzzle"]) < 0.01, "Rocket must spawn at the rotating muzzle")
-	assert(game.rockets[0]["vel"].normalized().dot(expected_shot_direction) > 0.99, "Rocket must fly toward the target")
+	assert(game.rockets[0]["vel"].normalized().dot(expected_shot_direction) > 0.99, "Rocket must leave the bazooka downward before homing")
 	assert(game.player_vel == Vector2.ZERO, "Firing down-right must not move the hero")
 	var rocket_count: int = game.rockets.size()
 	game.launch_player(shot_target)
@@ -604,10 +604,10 @@ func _test_shots_preserve_motion(game) -> void:
 				world.player_pos = Vector2(270, 650)
 				world.player_vel = velocity
 			var target: Vector2 = game.player_pos + aim_offset
-			var expected_direction: Vector2 = game.get_aim_solution(game.player_pos + Vector2(0, -260))["direction"]
+			var expected_direction := Vector2.DOWN
 			game.handle_game_press(target)
 			assert(game.player_vel == velocity and game.player_pos == control.player_pos, "Shots in every direction must preserve position and velocity")
-			assert(game.rockets.size() == 1 and game.rockets[0]["vel"].normalized().dot(expected_direction) > 0.99, "With no ghosts, tapping anywhere must fire upward")
+			assert(game.rockets.size() == 1 and game.rockets[0]["vel"].normalized().dot(expected_direction) > 0.99, "With no ghosts, tapping anywhere must fire downward")
 			var velocity_after_shot: Vector2 = game.player_vel
 			game.launch_player(target)
 			assert(game.player_vel == velocity_after_shot and game.rockets.size() == 1, "Reload must prevent extra rockets without changing movement")

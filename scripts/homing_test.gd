@@ -44,7 +44,11 @@ func _run() -> void:
 			assert(game.rockets.size() == 1 and not game.tutorial_visible, "The first touch must fire immediately without waiting for release")
 			assert(game.rockets[0]["target"] == target, "The nearest visible ghost must be selected regardless of the tap position")
 			var direction: Vector2 = game.rockets[0]["vel"].normalized()
-			assert(absf(angle_difference(game.visual_weapon_rotation, direction.angle())) < 0.001, "The bazooka must face the target when the rocket leaves the muzzle")
+			assert(direction.is_equal_approx(Vector2.DOWN), "Even with a ghost above, the rocket must launch downward")
+			assert(absf(angle_difference(game.visual_weapon_rotation, direction.angle())) < 0.001, "The bazooka barrel must point down along the launched rocket")
+			assert(game.rockets[0]["pos"].is_equal_approx(game.get_weapon_pivot() + Vector2.DOWN * 68.0), "The rocket must emerge from the downward-facing muzzle")
+			game.update_rockets(game.ROCKET_LAUNCH_TIME * 0.5)
+			assert(game.rockets[0]["vel"].normalized().is_equal_approx(Vector2.DOWN), "The rocket must visibly clear the barrel before homing")
 			_tap(game, Vector2(20, 900), false)
 			var drag := InputEventScreenDrag.new()
 			drag.position = Vector2(30, 700)
@@ -63,6 +67,21 @@ func _run() -> void:
 			assert(game.ghosts.size() == 1 and game.ghost_deaths.size() == 1, "Only the nearby target must be defeated")
 			assert(game.blocks == platforms_before, "Homing impacts must leave blocks and springs intact")
 			assert(game.player_pos == player_before and game.player_vel == velocity_before, "Automatic targeting must not move the hero")
+	# The new attackers approach from below: downward launch must still intercept them.
+	for frames_per_second in [15, 30, 60, 120]:
+		_reset(game)
+		game.player_pos = Vector2(270, 380)
+		game.ghost_attack_timer = 0.0
+		game.update_ghost_attacks(0.01)
+		var attacker: Dictionary = game.ghosts[0]
+		_tap(game, Vector2(20, 40))
+		assert(game.rockets[0]["vel"].normalized().is_equal_approx(Vector2.DOWN), "Tapping above the hero must still launch down at an attacker below")
+		for frame in frames_per_second:
+			game.update_ghosts(1.0 / frames_per_second)
+			game.update_rockets(1.0 / frames_per_second)
+			if not game.ghosts.has(attacker):
+				break
+		assert(not game.ghosts.has(attacker) and game.ghost_deaths.size() == 1, "A downward shot must hit a charging ghost below at every tested frame rate")
 	_reset(game)
 	var first_target: Dictionary = game.make_ghost(Vector2(240, 420), 0)
 	var replacement: Dictionary = game.make_ghost(Vector2(450, 120), 0)
@@ -83,7 +102,10 @@ func _run() -> void:
 	assert(game.rockets.is_empty(), "A rocket with no targets must eventually expire")
 	_reset(game)
 	_tap(game, Vector2(30, 930))
-	assert(game.rockets[0]["vel"].y < 0 and game.rockets[0]["target"].is_empty(), "With no visible ghosts, tapping anywhere must fire upward")
+	assert(game.rockets[0]["vel"].is_equal_approx(Vector2.DOWN * game.ROCKET_SPEED) and game.rockets[0]["target"].is_empty(), "With no visible ghosts, tapping anywhere must fire straight down")
+	var empty_shot_start: Vector2 = game.rockets[0]["pos"]
+	game.update_rockets(0.1)
+	assert(game.rockets[0]["pos"].is_equal_approx(empty_shot_start + Vector2(0, 69)), "An untargeted rocket must keep flying straight down")
 	var arriving: Dictionary = game.make_ghost(Vector2(400, 360), 0)
 	game.ghosts = [arriving]
 	game.update_rockets(0.05)
@@ -101,7 +123,7 @@ func _run() -> void:
 	_tap(game, Vector2(30, 930))
 	assert(game.rockets[0]["target"] == visible, "Unseen ghosts above the screen must not steal the tap target")
 	_reset(game)
-	game.ghosts = [game.make_ghost(game.get_weapon_pivot() + Vector2(0, -10), 0)]
+	game.ghosts = [game.make_ghost(game.get_weapon_pivot() + Vector2(0, 10), 0)]
 	var click := InputEventMouseButton.new()
 	click.button_index = MOUSE_BUTTON_LEFT
 	click.position = Vector2(20, 900)
@@ -120,5 +142,5 @@ func _run() -> void:
 	assert(game.ghosts.is_empty() and game.rockets.is_empty(), "A long frame must not let rockets tunnel through a ghost")
 	game.free()
 	DirAccess.remove_absolute("user://brick_homing_test.cfg")
-	print("HOMING_TEST_OK immediate_tap click nearest_visible moving_target retarget no_target close_range swept_hit pause platforms_safe fps_15_30_60_120")
+	print("HOMING_TEST_OK downward_muzzle downward_launch immediate_tap click nearest_visible moving_target retarget no_target close_range swept_hit pause platforms_safe fps_15_30_60_120")
 	quit()

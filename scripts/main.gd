@@ -19,6 +19,7 @@ const STEERING_SPEED := 320.0
 const STEERING_ACCELERATION := 1800.0
 const ROCKET_SPEED := 690.0
 const ROCKET_TURN_SPEED := 10.0
+const ROCKET_LAUNCH_TIME := 0.08
 const JET_DURATION := 2.8
 const JET_SPEED := 820.0
 const BOOTS_SIZE := Vector2(58, 58)
@@ -442,8 +443,8 @@ func launch_player(_tap_position: Vector2 = Vector2.ZERO) -> void:
 	if screen != Screen.GAME or paused or tilt_control.needs_permission() or reload_timer > 0.0:
 		return
 	var ghost := nearest_visible_ghost(player_pos)
-	var target: Vector2 = ghost["pos"] if not ghost.is_empty() else player_pos + Vector2(0, -260)
-	var solution := get_aim_solution(target)
+	# Leave the downward-facing barrel before homing toward the selected ghost.
+	var solution := get_aim_solution(get_weapon_pivot() + Vector2.DOWN * 260.0)
 	var muzzle_position: Vector2 = solution["muzzle"]
 	var shot_direction: Vector2 = solution["direction"]
 	last_shot_direction = shot_direction
@@ -454,7 +455,7 @@ func launch_player(_tap_position: Vector2 = Vector2.ZERO) -> void:
 	weapon_kick = 1.0
 	screen_flash = 0.26
 	rockets.append({"pos": muzzle_position, "vel": shot_direction * ROCKET_SPEED, "life": 2.2, "trail": 0.0,
-		"homing": true, "target": ghost, "sweep_origin": get_weapon_pivot()})
+		"homing": true, "target": ghost, "launch_time": ROCKET_LAUNCH_TIME, "sweep_origin": get_weapon_pivot()})
 	spawn_muzzle(muzzle_position, shot_direction)
 
 
@@ -706,6 +707,9 @@ func update_rockets(delta: float) -> void:
 		var previous_position: Vector2 = rocket.get("sweep_origin", rocket["pos"])
 		rocket.erase("sweep_origin")
 		if rocket.get("homing", false):
+			var launch_time: float = rocket.get("launch_time", 0.0)
+			var homing_delta := maxf(0.0, delta - launch_time)
+			rocket["launch_time"] = maxf(0.0, launch_time - delta)
 			var target: Dictionary = rocket.get("target", {})
 			if target.is_empty() or not ghosts.has(target):
 				target = nearest_visible_ghost(rocket["pos"])
@@ -713,7 +717,7 @@ func update_rockets(delta: float) -> void:
 			if not target.is_empty():
 				var desired: Vector2 = target["pos"] - rocket["pos"]
 				var current_angle: float = rocket["vel"].angle()
-				var turn := clampf(angle_difference(current_angle, desired.angle()), -ROCKET_TURN_SPEED * delta, ROCKET_TURN_SPEED * delta)
+				var turn := clampf(angle_difference(current_angle, desired.angle()), -ROCKET_TURN_SPEED * homing_delta, ROCKET_TURN_SPEED * homing_delta)
 				rocket["vel"] = Vector2.from_angle(current_angle + turn) * ROCKET_SPEED
 		rocket["pos"] = rocket["pos"] + rocket["vel"] * delta
 		rocket["life"] = float(rocket["life"]) - delta

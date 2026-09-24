@@ -21,7 +21,7 @@ godot --path .
 - On desktop, use **←/→** or physical **A/D** (**Ф/В** on a Russian layout) to move. The first movement key dismisses the introductory overlay and starts play. Keyboard hints appear on the title screen and before the first move; platform jumps remain automatic. Taps and clicks fire independently of movement.
 - Tap anywhere (or click on desktop) to fire immediately at the nearest visible ghost. No aiming or dragging is needed. Releasing or dragging does not fire again.
 - The hero faces horizontal travel and keeps the last facing during vertical flight. Lean follows movement; shooting never reverses the body. The bazooka aims independently behind the hero so it cannot cover the face.
-- Rockets track the selected ghost as it moves. If it disappears, they seek another visible ghost; with no ghosts, a shot flies upward. Shooting does not change the hero's position, velocity or trajectory in any direction.
+- Rockets leave the bazooka's downward-facing muzzle, clear the barrel for 0.08 seconds, then track the selected ghost as it moves. If it disappears, they seek another visible ghost; with no ghosts, a shot continues straight down. Shooting does not change the hero's position, velocity or trajectory in any direction.
 - Enter or Space: start from the title screen; during play, fire a homing rocket. Either key also resumes a paused run without firing.
 - Escape: pause.
 - The title screen has one active control: START. Its painted button launches the game.
