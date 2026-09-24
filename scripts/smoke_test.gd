@@ -75,7 +75,7 @@ func _run() -> void:
 	var shot_target: Vector2 = game.player_pos + Vector2(140, 240)
 	game.ghosts = [game.make_ghost(shot_target, 0)]
 	game.update_aim_target(shot_target)
-	assert(not game.facing_left, "A rightward shot must turn the hero to the right")
+	assert(not game.facing_left, "Firing must preserve the idle hero's facing")
 	var solution: Dictionary = game.get_aim_solution(shot_target)
 	var expected_shot_direction: Vector2 = solution["direction"]
 	game.launch_player(shot_target)
@@ -99,7 +99,7 @@ func _run() -> void:
 	var left_target: Vector2 = game.player_pos + Vector2(-140, 240)
 	game.ghosts = [game.make_ghost(left_target, 0)]
 	game.update_aim_target(left_target)
-	assert(game.facing_left, "A leftward shot must turn the hero to the left")
+	assert(not game.facing_left, "Shooting left must not turn a stationary hero")
 	game.launch_player(left_target)
 	assert(game.player_vel == Vector2.ZERO, "Firing down-left must not move the hero")
 
@@ -130,8 +130,9 @@ func _run() -> void:
 		assert(absf(game.visual_body_rotation) <= deg_to_rad(50.1), "Body lean must remain controlled")
 		assert(is_finite(game.visual_weapon_rotation), "Weapon rotation must remain stable")
 	game.update_aim_target(game.player_pos + Vector2(130, 250))
+	game.player_vel.x = 220
 	game.update_visual_controller(0.12)
-	assert(game.visual_body_rotation > 0, "Down-right aim must lean the body clockwise")
+	assert(game.visual_body_rotation > 0, "Rightward movement must lean the body clockwise")
 	var weapon_error := absf(angle_difference(game.visual_weapon_rotation, game.aim_direction.angle()))
 	assert(weapon_error < 0.25, "Bazooka must track the aim quickly")
 	var right_draw_state: Dictionary = game.get_weapon_draw_state()
@@ -143,17 +144,19 @@ func _run() -> void:
 	var pivot_before_smoothing: Vector2 = game.get_weapon_pivot()
 	assert(pivot_before_flip.distance_to(pivot_before_smoothing) < 0.01, "Flip must not teleport the weapon anchor")
 	game.update_aim_target(game.player_pos + Vector2(-130, 250))
+	game.player_vel.x = -220
 	for frame in 12:
 		game.update_visual_controller(1.0 / 60.0)
-	assert(game.visual_body_rotation < 0, "Down-left aim must lean the body counter-clockwise")
+	assert(game.visual_body_rotation < 0, "Leftward movement must lean the body counter-clockwise")
 	assert(game.weapon_anchor_x < 0, "The bazooka grip must move to the hero's left-facing hand")
 	var left_draw_state: Dictionary = game.get_weapon_draw_state()
 	assert(left_draw_state["scale"].x > 0, "Left-facing bazooka must use its original readable orientation")
 	assert(absf(wrapf(left_draw_state["rotation"], -PI, PI)) <= PI * 0.5, "Left-facing bazooka must stay upright")
 	game.update_aim_target(game.player_pos + Vector2(130, 250))
+	game.player_vel.x = 220
 	for frame in 24:
 		game.update_visual_controller(1.0 / 60.0)
-	assert(not game.facing_left and game.weapon_anchor_x > 0, "Rightward aim must flip the hero and grip together")
+	assert(not game.facing_left and game.weapon_anchor_x > 0, "Rightward movement must flip the hero and grip together")
 
 	game.start_game()
 	game.tutorial_visible = false
@@ -195,6 +198,7 @@ func _run() -> void:
 	game.tutorial_visible = false
 	game.height_meters = 88
 	for expected_health in [2, 1, 0]:
+		game.respawn_timer = 0.0
 		game.player_pos = Vector2(270, 1041)
 		game.player_vel = Vector2.ZERO
 		# A ghost at the fall boundary must not charge a second life in the same frame.
@@ -203,7 +207,7 @@ func _run() -> void:
 		assert(game.health == expected_health, "Each fall must consume exactly one heart, including the first")
 		assert(game.height_meters == 88, "Recovering from a fall must retain the run score")
 		if expected_health > 0:
-			assert(game.screen == 1 and game.player_pos.y < 960 and game.player_vel.y < 0, "Remaining lives must return the player to the level")
+			assert(game.screen == 1 and game.player_pos.y < 960 and game.respawn_timer > 0.0, "Remaining lives must return the player onto a platform")
 			assert(game.contact_cooldown > 0, "Returning after a fall must give brief protection from ghosts")
 			game.ghosts = [game.make_ghost(game.player_pos + Vector2(0, -7), 0.0)]
 			game.check_player_ghost_collisions()

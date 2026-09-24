@@ -19,7 +19,9 @@ const STEERING_SPEED := 320.0
 const STEERING_ACCELERATION := 1800.0
 const ROCKET_SPEED := 690.0
 const ROCKET_TURN_SPEED := 10.0
-const GHOST_SPAWN_CHANCE := 0.38
+const JET_DURATION := 2.8
+const JET_SPEED := 820.0
+const BOOTS_SIZE := Vector2(58, 58)
 const GHOST_ALERT_DISTANCE := 200.0
 const GHOST_CALM_DISTANCE := 250.0
 const GHOST_TRANSITION_TIME := 0.12
@@ -40,6 +42,8 @@ const TILT_CONTROL := preload("res://scripts/tilt_control.gd")
 const BAZOOKA_BODY_TEX := preload("res://assets/weapons/bazooka_body.png")
 const ROCKET_TEX := preload("res://assets/weapons/rocket.svg")
 const SPRING_TEX := preload("res://assets/powerups/spring.svg")
+const BOOTS_TEX := preload("res://assets/ui/boots_icon.svg")
+const MASK_OUTLINE := [Vector2(624, 92), Vector2(674, 113), Vector2(710, 169), Vector2(737, 237), Vector2(728, 304), Vector2(693, 380), Vector2(674, 425), Vector2(633, 441), Vector2(603, 415), Vector2(579, 371), Vector2(557, 321), Vector2(539, 281), Vector2(543, 213), Vector2(557, 166), Vector2(586, 119)]
 
 # Clip the baked-in boot exhaust at the soles without changing the supplied sprite.
 const HERO_BODY_OUTLINE := [
@@ -118,8 +122,16 @@ var damage_flash := 0.0
 var health := MAX_HEALTH
 var platforms_until_spring := 2
 var platforms_until_fake := 4
+var platforms_until_boots := 5
+var jet_timer := 0.0
+var ghost_attack_timer := 2.5
+var respawn_timer := 0.0
+var respawn_platform: Dictionary = {}
+var previous_player_pos := Vector2.ZERO
 var hero_body_polygon := PackedVector2Array()
 var hero_body_uvs := PackedVector2Array()
+var mask_polygon := PackedVector2Array()
+var mask_uvs := PackedVector2Array()
 var camera_shake := 0.0
 var screen_flash := 0.0
 var last_shot_direction := Vector2.DOWN
@@ -150,6 +162,9 @@ func _ready() -> void:
 		var uv: Vector2 = point / HERO_BODY_TEX.get_size()
 		hero_body_uvs.append(uv)
 		hero_body_polygon.append(Vector2(-67, -57) + uv * Vector2(134, 114))
+	for point in MASK_OUTLINE:
+		mask_uvs.append(point / HERO_BODY_TEX.get_size())
+		mask_polygon.append((point - Vector2(638, 266)) * Vector2(0.14, 0.14))
 	tilt_control = TILT_CONTROL.new()
 	add_child(tilt_control)
 	setup_video_background()
@@ -257,8 +272,6 @@ func _process(delta: float) -> void:
 	weapon_kick = maxf(0.0, weapon_kick - delta * 6.5)
 	camera_shake = maxf(0.0, camera_shake - delta * 3.8)
 	screen_flash = maxf(0.0, screen_flash - delta * 4.5)
-	if screen == Screen.GAME:
-		update_visual_controller(delta)
 	if screen == Screen.GAME and not paused and not tutorial_visible and not tilt_control.needs_permission():
 		update_game(delta)
 	queue_redraw()
@@ -296,20 +309,15 @@ func _unhandled_input(event: InputEvent) -> void:
 func update_aim_target(position: Vector2) -> void:
 	var solution := get_aim_solution(position)
 	aim_direction = solution["direction"]
-	if aim_direction.x < 0.0:
-		facing_left = true
-	elif aim_direction.x > 0.0:
-		facing_left = false
 
 
 func update_visual_controller(delta: float) -> void:
 	var desired_weapon_angle := aim_direction.angle()
 	var weapon_weight := 1.0 - exp(-20.0 * delta)
 	visual_weapon_rotation = lerp_angle(visual_weapon_rotation, desired_weapon_angle, weapon_weight)
-	var lean_limit := deg_to_rad(50.0)
-	var desired_body_rotation := clampf(aim_direction.x * deg_to_rad(42.0), -lean_limit, lean_limit)
-	if shoot_timer <= 0.0:
-		desired_body_rotation = clampf(player_vel.x / 720.0 * deg_to_rad(24.0), -deg_to_rad(28.0), deg_to_rad(28.0))
+	if absf(player_vel.x) > 12.0:
+		facing_left = player_vel.x < 0.0
+	var desired_body_rotation := clampf(player_vel.x / STEERING_SPEED * deg_to_rad(20.0), -deg_to_rad(28.0), deg_to_rad(28.0))
 	var body_weight := 1.0 - exp(-7.0 * delta)
 	visual_body_rotation = lerp_angle(visual_body_rotation, desired_body_rotation, body_weight)
 	var desired_anchor_x := -22.0 if facing_left else 22.0
@@ -376,6 +384,12 @@ func start_game() -> void:
 	health = MAX_HEALTH
 	platforms_until_spring = 2
 	platforms_until_fake = 4
+	platforms_until_boots = 5
+	jet_timer = 0.0
+	ghost_attack_timer = 2.5
+	respawn_timer = 0.0
+	respawn_platform = {}
+	previous_player_pos = player_pos
 	weapon_kick = 0.0
 	camera_shake = 0.0
 	screen_flash = 0.0
@@ -435,10 +449,6 @@ func launch_player(_tap_position: Vector2 = Vector2.ZERO) -> void:
 	last_shot_direction = shot_direction
 	aim_direction = shot_direction
 	visual_weapon_rotation = shot_direction.angle()
-	if shot_direction.x < 0.0:
-		facing_left = true
-	elif shot_direction.x > 0.0:
-		facing_left = false
 	reload_timer = 0.56
 	shoot_timer = 0.20
 	weapon_kick = 1.0
@@ -449,10 +459,29 @@ func launch_player(_tap_position: Vector2 = Vector2.ZERO) -> void:
 
 
 func update_game(delta: float) -> void:
-	player_vel.y += PLAYER_GRAVITY * delta
+	if respawn_timer > 0.0:
+		update_platforms(delta)
+		update_ghost_deaths(delta)
+		update_particles(delta)
+		player_pos = respawn_platform["pos"] + Vector2(respawn_platform["size"].x * 0.5, -48)
+		previous_player_pos = player_pos
+		respawn_timer = maxf(0.0, respawn_timer - delta)
+		if respawn_timer == 0.0:
+			player_vel = Vector2(0, -PLATFORM_BOUNCE_SPEED)
+		return
+	previous_player_pos = player_pos
+	if jet_timer > 0.0:
+		jet_timer = maxf(0.0, jet_timer - delta)
+		player_vel.y = -JET_SPEED
+		if jet_timer == 0.0:
+			contact_cooldown = maxf(contact_cooldown, 0.6)
+	else:
+		player_vel.y += PLAYER_GRAVITY * delta
 	player_vel.x = move_toward(player_vel.x, tilt_control.read_axis() * STEERING_SPEED, STEERING_ACCELERATION * delta)
 	player_pos += player_vel * delta
 	player_pos.x = wrapf(player_pos.x, 0.0, VIEW_SIZE.x)
+	if absf(player_pos.x - previous_player_pos.x) > VIEW_SIZE.x * 0.5:
+		previous_player_pos.x = player_pos.x - player_vel.x * delta
 
 	var camera_shift := 0.0
 	if player_pos.y < 345:
@@ -460,25 +489,56 @@ func update_game(delta: float) -> void:
 		player_pos.y = 345.0
 		height_meters += camera_shift * 0.19
 		shift_world(camera_shift)
+		previous_player_pos.y += camera_shift
 
 	spawn_world_if_needed()
 	update_platforms(delta)
+	update_ghost_attacks(delta)
 	update_ghosts(delta)
 	update_ghost_deaths(delta)
 	update_rockets(delta)
 	update_particles(delta)
+	check_boots_pickups()
 	check_player_block_collisions()
 	if player_pos.y > 1040:
 		lose_heart()
 		if screen == Screen.GAME:
-			player_pos.y = 770
-			player_vel = Vector2(0, -362)
+			respawn_on_nearest_platform()
 		cleanup_world()
 		return
 	check_player_ghost_collisions()
 	if screen != Screen.GAME:
 		return
 	cleanup_world()
+	update_visual_controller(delta)
+
+
+func respawn_on_nearest_platform() -> void:
+	var nearest: Dictionary = {}
+	var nearest_distance := INF
+	for block in blocks:
+		if block.get("fake", false) or block["pos"].y < 140 or block["pos"].y > 920:
+			continue
+		var landing: Vector2 = block["pos"] + Vector2(block["size"].x * 0.5, -48)
+		var distance := player_pos.distance_squared_to(landing)
+		if distance < nearest_distance:
+			nearest_distance = distance
+			nearest = block
+	if nearest.is_empty():
+		nearest = {"pos": Vector2(clampf(player_pos.x - 70, 22, 378), 800), "size": Vector2(140, 48), "skin": 5, "kind": 1, "hp": 2, "max_hp": 2, "spring": false, "fake": false}
+		blocks.append(nearest)
+	respawn_platform = nearest
+	respawn_timer = 0.6
+	jet_timer = 0.0
+	player_pos = nearest["pos"] + Vector2(nearest["size"].x * 0.5, -48)
+	previous_player_pos = player_pos
+	player_vel = Vector2.ZERO
+	contact_cooldown = 2.0
+	ghost_attack_timer = maxf(ghost_attack_timer, 2.5)
+	# Give the player room to regain control on the moving platform.
+	for index in range(ghosts.size() - 1, -1, -1):
+		if ghosts[index]["pos"].distance_to(player_pos) < 180:
+			ghosts.remove_at(index)
 
 
 func shift_world(amount: float) -> void:
@@ -486,6 +546,8 @@ func shift_world(amount: float) -> void:
 		block["pos"] = block["pos"] + Vector2(0, amount)
 	for ghost in ghosts:
 		ghost["pos"] = ghost["pos"] + Vector2(0, amount)
+		if ghost.has("previous_pos"):
+			ghost["previous_pos"].y += amount
 	for death in ghost_deaths:
 		death["pos"] = death["pos"] + Vector2(0, amount)
 	for rocket in rockets:
@@ -505,6 +567,9 @@ func spawn_world_if_needed() -> void:
 
 func spawn_block(y_position: float) -> void:
 	var skin := rng.randi_range(0, PLATFORM_ART.size() - 1)
+	var sturdy_chance := lerpf(0.85, 0.15, clampf(height_meters / 1500.0, 0.0, 1.0))
+	if (height_meters == 0.0 and y_position > -200.0) or rng.randf() < sturdy_chance:
+		skin = 5 if rng.randf() < 0.5 else 6
 	var art: Dictionary = PLATFORM_ART[skin]
 	var region: Rect2 = art["region"]
 	var width := rng.randf_range(110, 135)
@@ -515,7 +580,9 @@ func spawn_block(y_position: float) -> void:
 	var extra_spring_rows := floori(maxf(height_meters, 0.0) / SPRING_RARITY_HEIGHT_STEP) * 2
 	platforms_until_spring = rng.randi_range(4, 6) + extra_spring_rows if has_spring else platforms_until_spring - 1
 	# Decoys supplement the climbable route; they never replace a safe row.
-	var has_fake := platforms_until_fake <= 0 and not has_spring
+	var has_boots := platforms_until_boots <= 0 and not has_spring
+	platforms_until_boots = rng.randi_range(11, 15) if has_boots else maxi(0, platforms_until_boots - 1)
+	var has_fake := platforms_until_fake <= 0 and not has_spring and not has_boots
 	platforms_until_fake = rng.randi_range(2, 4) if has_fake else maxi(0, platforms_until_fake - 1)
 	var fake_width := rng.randf_range(85, 110) if has_fake else 0.0
 	var pair_gap := 48.0 if has_fake else 0.0
@@ -541,11 +608,21 @@ func spawn_block(y_position: float) -> void:
 			"kind": 1, "hp": 1, "max_hp": 1, "spring": false, "fake": true,
 			"motion_center": fake_center, "motion_amplitude": amplitude, "motion_phase": phase, "motion_rate": motion_rate})
 	blocks.append({"pos": Vector2(x, y_position), "size": size, "skin": skin, "kind": int(art["kind"]), "hp": hp, "max_hp": hp, "spring": has_spring,
-		"fake": false,
+		"fake": false, "boots": has_boots,
 		"motion_center": center_x, "motion_amplitude": amplitude, "motion_phase": phase, "motion_rate": motion_rate})
-	# Keep spring takeoffs clear; ordinary rows can have a drifting ghost above a brick.
-	if not has_spring and y_position < 520.0 and rng.randf() < GHOST_SPAWN_CHANCE:
-		ghosts.append(make_ghost(Vector2(clampf(x + width * 0.5 + rng.randf_range(-55, 55), 55, 485), y_position - 79), rng.randf_range(34, 62) * (-1.0 if rng.randf() < 0.5 else 1.0)))
+
+
+func update_ghost_attacks(delta: float) -> void:
+	ghost_attack_timer -= delta
+	if ghost_attack_timer > 0.0:
+		return
+	ghost_attack_timer = rng.randf_range(2.8, 4.2) - minf(height_meters / 2500.0, 1.2)
+	if ghosts.size() >= 3:
+		return
+	var position := Vector2(clampf(player_pos.x + rng.randf_range(-170, 170), 48, 492), player_pos.y + 260)
+	var ghost := make_ghost(position, 0.0)
+	ghost.merge({"attack": true, "windup": 0.22, "life": 4.5, "vel": Vector2(0, -540), "state": "alert", "previous_state": "alert"}, true)
+	ghosts.append(ghost)
 
 
 func update_platforms(delta: float) -> void:
@@ -574,7 +651,23 @@ func ghost_frame(clip: String, animation_time: float) -> Texture2D:
 
 
 func update_ghosts(delta: float) -> void:
-	for ghost in ghosts:
+	for index in range(ghosts.size() - 1, -1, -1):
+		var ghost: Dictionary = ghosts[index]
+		ghost["previous_pos"] = ghost["pos"]
+		if ghost.get("attack", false):
+			ghost["life"] -= delta
+			if ghost["life"] <= 0:
+				ghosts.remove_at(index)
+				continue
+			ghost["windup"] = maxf(0.0, ghost["windup"] - delta)
+			if ghost["windup"] <= 0:
+				var target: Vector2 = player_pos + Vector2(player_vel.x * 0.12, -7)
+				var direction: Vector2 = (target - ghost["pos"]).normalized()
+				ghost["vel"] = ghost["vel"].move_toward(direction * 540.0, 1500.0 * delta)
+				ghost["pos"] += ghost["vel"] * delta
+			ghost["animation_time"] = fmod(float(ghost.get("animation_time", 0.0)) + delta, ghost_clip_duration("alert"))
+			ghost["transition"] = GHOST_TRANSITION_TIME
+			continue
 		var old_phase: float = ghost["phase"]
 		ghost["phase"] = old_phase + delta * 2.2
 		var position: Vector2 = ghost["pos"]
@@ -684,6 +777,21 @@ func spring_rect(block: Dictionary) -> Rect2:
 	return Rect2(block["pos"] + Vector2((block["size"].x - SPRING_SIZE.x) * 0.5, -SPRING_SIZE.y), SPRING_SIZE)
 
 
+func boots_rect(block: Dictionary) -> Rect2:
+	return Rect2(block["pos"] + Vector2((block["size"].x - BOOTS_SIZE.x) * 0.5, -BOOTS_SIZE.y - 8), BOOTS_SIZE)
+
+
+func check_boots_pickups() -> void:
+	var body := Rect2(player_pos + Vector2(-30, -50), Vector2(60, 90))
+	for block in blocks:
+		if block.get("boots", false) and body.intersects(boots_rect(block)):
+			block["boots"] = false
+			jet_timer = JET_DURATION
+			player_vel.y = -JET_SPEED
+			show_toast("БОТИНКИ-ДЖЕТПАК!")
+			return
+
+
 func check_player_block_collisions() -> void:
 	if player_vel.y <= 0:
 		return
@@ -715,12 +823,25 @@ func check_player_block_collisions() -> void:
 
 
 func check_player_ghost_collisions() -> void:
-	if screen != Screen.GAME or contact_cooldown > 0.0:
+	if screen != Screen.GAME or (contact_cooldown > 0.0 and jet_timer <= 0.0):
 		return
-	for ghost in ghosts:
-		var offset: Vector2 = player_pos + Vector2(0, -7) - ghost["pos"]
-		if offset.length() > 45.0:
+	for index in range(ghosts.size() - 1, -1, -1):
+		var ghost: Dictionary = ghosts[index]
+		if ghost.get("windup", 0.0) > 0.0:
 			continue
+		var offset: Vector2 = player_pos + Vector2(0, -7) - ghost["pos"]
+		var distance := offset.length()
+		if ghost.has("previous_pos") and (ghost.get("attack", false) or jet_timer > 0.0):
+			var previous_offset: Vector2 = previous_player_pos + Vector2(0, -7) - ghost["previous_pos"]
+			distance = Geometry2D.get_closest_point_to_segment(Vector2.ZERO, previous_offset, offset).length()
+		if distance > (62.0 if jet_timer > 0.0 else 45.0):
+			continue
+		if jet_timer > 0.0:
+			spawn_ghost_pop(ghost["pos"])
+			ghosts.remove_at(index)
+			continue
+		if ghost.get("attack", false):
+			ghosts.remove_at(index)
 		player_vel = Vector2(240.0 if offset.x >= 0 else -240.0, -320.0)
 		player_pos += offset.normalized() * 12.0 if offset.length() > 1.0 else Vector2(0, -12)
 		lose_heart()
@@ -906,6 +1027,10 @@ func draw_game() -> void:
 	for block in blocks:
 		if block.get("spring", false):
 			draw_texture_rect(SPRING_TEX, spring_rect(block), false)
+		if block.get("boots", false):
+			var boots := boots_rect(block)
+			draw_circle(boots.get_center(), 33 + sin(menu_time * 5.0) * 2, Color(1, 0.65, 0.15, 0.2))
+			draw_texture_rect(BOOTS_TEX, boots, false)
 	for ghost in ghosts:
 		draw_enemy_ghost(ghost)
 	draw_ghost_deaths()
@@ -957,21 +1082,24 @@ func draw_player() -> void:
 	draw_set_transform(label_position, weapon_draw_state["rotation"], Vector2.ONE)
 	draw_label("SNW", Vector2(-13, 4), 9, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 26, 1)
 	draw_set_transform(player_pos + current_shake_offset, body_rotation, scale_value)
-	draw_polygon(hero_body_polygon, PackedColorArray([tint]), hero_body_uvs, HERO_BODY_TEX)
+	if jet_timer > 0.0:
+		draw_texture_rect(HERO_BODY_TEX, Rect2(-67, -57, 134, 114), false, tint)
+	else:
+		draw_polygon(hero_body_polygon, PackedColorArray([tint]), hero_body_uvs, HERO_BODY_TEX)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
 func draw_game_hud() -> void:
 	draw_score_counter()
+	if jet_timer > 0.0:
+		draw_texture_rect(BOOTS_TEX, Rect2(204, 125, 30, 30), false)
+		draw_rect(Rect2(244, 133, 92, 14), INK)
+		draw_rect(Rect2(247, 136, 86 * jet_timer / JET_DURATION, 8), GOLD)
 	for index in MAX_HEALTH:
 		var center := Vector2(VIEW_SIZE.x * 0.5 + (index - (MAX_HEALTH - 1) * 0.5) * 46, VIEW_SIZE.y - 43)
-		var heart_color := RED if index < health else Color("405062")
-		draw_circle(center + Vector2(-7, -4), 11, Color.BLACK)
-		draw_circle(center + Vector2(7, -4), 11, Color.BLACK)
-		draw_colored_polygon(PackedVector2Array([center + Vector2(-18, -1), center + Vector2(18, -1), center + Vector2(0, 21)]), Color.BLACK)
-		draw_circle(center + Vector2(-7, -4), 8, heart_color)
-		draw_circle(center + Vector2(7, -4), 8, heart_color)
-		draw_colored_polygon(PackedVector2Array([center + Vector2(-15, -1), center + Vector2(15, -1), center + Vector2(0, 16)]), heart_color)
+		draw_set_transform(center)
+		draw_polygon(mask_polygon, PackedColorArray([WHITE if index < health else Color(0.22, 0.3, 0.37, 0.65)]), mask_uvs, HERO_BODY_TEX)
+	draw_set_transform(Vector2.ZERO)
 
 
 func draw_score_counter() -> void:

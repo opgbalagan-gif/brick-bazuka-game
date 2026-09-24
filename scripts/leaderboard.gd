@@ -23,9 +23,12 @@ var save_button: Button
 var status_label: Label
 var rows_box: VBoxContainer
 var refresh_timer: Timer
+var web_name_input: JavaScriptObject
 
 
 func _ready() -> void:
+	if OS.has_feature("web"):
+		web_name_input = JavaScriptBridge.get_interface("BrickNameInput")
 	size = Vector2(540, 960)
 	z_index = 20
 	mouse_filter = Control.MOUSE_FILTER_STOP
@@ -42,6 +45,25 @@ func _ready() -> void:
 	refresh_timer.timeout.connect(load_scores)
 	add_child(refresh_timer)
 	hide()
+
+
+func _process(_delta: float) -> void:
+	if not visible or web_name_input == null:
+		return
+	var rect := name_input.get_global_rect()
+	web_name_input.place(rect.position.x, rect.position.y, rect.size.x, rect.size.y)
+	web_name_input.set_editable(name_input.editable)
+	var value := str(web_name_input.get_value())
+	if name_input.text != value:
+		name_input.text = value
+		_sync_save_button()
+	if bool(web_name_input.consume_submit()):
+		save_score()
+
+
+func _exit_tree() -> void:
+	if web_name_input != null:
+		web_name_input.close()
 
 
 func _box(fill: Color, border: Color, width: int = 2) -> StyleBoxFlat:
@@ -108,7 +130,7 @@ func _build_ui() -> void:
 	name_input.max_length = 20
 	name_input.custom_minimum_size = Vector2(245, 48)
 	name_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	name_input.virtual_keyboard_enabled = true
+	name_input.virtual_keyboard_enabled = web_name_input == null
 	name_input.add_theme_font_size_override("font_size", 22)
 	name_input.add_theme_color_override("font_color", WHITE)
 	name_input.add_theme_stylebox_override("normal", _box(Color("061420"), Color("557181")))
@@ -181,12 +203,18 @@ func show_results(score: int) -> void:
 	if run_id.is_empty():
 		status_label.text = "Подключение к рейтингу…" if busy["runs"] else "Нет связи с рейтингом. Нажми «Повторить»."
 	show()
+	if web_name_input != null:
+		web_name_input.open(last_name, name_input.editable)
+	elif name_input.editable:
+		name_input.grab_focus.call_deferred()
 	_sync_save_button()
 	load_scores()
 	refresh_timer.start()
 
 
 func dismiss() -> void:
+	if web_name_input != null:
+		web_name_input.close()
 	if is_instance_valid(name_input):
 		name_input.release_focus()
 	if is_instance_valid(refresh_timer):
@@ -219,6 +247,8 @@ func _valid_name(value: String) -> bool:
 
 
 func save_score() -> void:
+	if web_name_input != null and visible:
+		name_input.text = str(web_name_input.get_value())
 	if submitted or busy["scores"] or busy["runs"]:
 		return
 	if run_id.is_empty():
@@ -236,6 +266,8 @@ func save_score() -> void:
 		player_name_changed.emit(last_name)
 		pending_score = {"action": "brick_scores", "id": run_id, "token": run_token, "name": chosen_name, "score": run_score}
 	name_input.editable = false
+	if web_name_input != null:
+		web_name_input.set_editable(false)
 	name_input.release_focus()
 	status_label.text = "Сохраняем результат…"
 	_send("scores", pending_score)
@@ -272,7 +304,9 @@ func _send(operation: String, payload: Dictionary = {}) -> void:
 
 func _response(result: int, code: int, _headers: PackedStringArray, body: PackedByteArray, operation: String) -> void:
 	busy[operation] = false
-	var value = JSON.parse_string(body.get_string_from_utf8()) if not body.is_empty() else null
+	var parser := JSON.new()
+	var parsed := parser.parse(body.get_string_from_utf8()) if not body.is_empty() else ERR_PARSE_ERROR
+	var value = parser.data if parsed == OK else null
 	if result != HTTPRequest.RESULT_SUCCESS or code != 200 or not value is Dictionary:
 		_failed(operation, "Нет связи с рейтингом. Нажми «Повторить».")
 		return
