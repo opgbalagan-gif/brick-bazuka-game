@@ -24,9 +24,10 @@ func run() -> void:
 	test_sturdy_start(game)
 	test_facing(game)
 	test_attacks(game)
+	test_wider_view(game)
 	test_boots(game)
 	await test_name_input(game)
-	print("GAMEPLAY_FIXES_TEST_OK nearest_respawn sturdy_start movement_facing attacks_from_below jet_boots masks name_input")
+	print("GAMEPLAY_FIXES_TEST_OK nearest_respawn sturdy_start movement_facing slower_attacks wider_view jet_boots masks name_input")
 	game.free()
 	quit()
 
@@ -38,7 +39,7 @@ func test_respawn(game) -> void:
 	var decoy := platform(Vector2(210, 900), true)
 	game.blocks = [higher, near, decoy]
 	game.height_meters = 753
-	game.player_pos = Vector2(270, 1041)
+	game.player_pos = Vector2(270, game.WORLD_SIZE.y + 81)
 	game.player_vel = Vector2(0, 200)
 	game.update_game(1.0 / 60)
 	assert(game.health == 2 and game.respawn_platform == near, "Falling must spend one life and choose the nearest safe visible board")
@@ -56,13 +57,13 @@ func test_respawn(game) -> void:
 	assert(game.respawn_timer == 0 and game.player_vel.y < 0, "The hero must automatically resume jumping after the short landing")
 	reset(game)
 	game.blocks = [decoy]
-	game.player_pos = Vector2(535, 1042)
+	game.player_pos = Vector2(game.WORLD_SIZE.x - 5, game.WORLD_SIZE.y + 82)
 	game.update_game(0.01)
 	assert(not game.respawn_platform.get("fake", false) and game.blocks.has(game.respawn_platform), "If all boards are gone, respawn must supply a safe board")
-	assert(game.respawn_platform["pos"].x + game.respawn_platform["size"].x <= 518, "A recovery board must fit the screen")
+	assert(game.respawn_platform["pos"].x + game.respawn_platform["size"].x <= game.WORLD_SIZE.x - 22, "A recovery board must fit the screen")
 	game.respawn_timer = 0
 	game.health = 1
-	game.player_pos.y = 1042
+	game.player_pos.y = game.WORLD_SIZE.y + 82
 	game.update_game(0.01)
 	assert(game.health == 0 and game.screen == game.Screen.GAME_OVER, "The last life must end the run without respawning")
 
@@ -105,12 +106,15 @@ func test_attacks(game) -> void:
 		game.ghost_attack_timer = 0
 		game.update_ghost_attacks(0.01)
 		assert(game.ghosts.size() == 1 and game.ghosts[0]["pos"].y > game.player_pos.y + 200, "Attackers must appear below the hero with some reaction distance")
+		var elapsed := 0.0
 		for frame in fps * 2:
 			game.update_ghosts(1.0 / fps)
+			elapsed += 1.0 / fps
+			assert(game.ghosts[0]["vel"].length() <= 320.01, "Attack speed must stay below the new slower limit")
 			game.check_player_ghost_collisions()
 			if game.health == 2:
 				break
-		assert(game.health == 2 and game.ghosts.is_empty(), "A charging ghost must reach the hero quickly and spend only one life")
+		assert(elapsed >= 0.9 and game.health == 2 and game.ghosts.is_empty(), "The slower attack must allow reaction time and still spend only one life")
 	reset(game)
 	game.ghost_attack_timer = 0
 	game.update_ghost_attacks(0.01)
@@ -125,6 +129,39 @@ func test_attacks(game) -> void:
 		game.ghost_attack_timer = 0
 		game.update_ghost_attacks(0.01)
 	assert(game.ghosts.size() == 3, "An attack wave must not accumulate more than three ghosts")
+
+func test_wider_view(game) -> void:
+	reset(game)
+	# These coordinates were outside the old view, but now belong to the playable screen.
+	var lower_board := platform(Vector2(520, 1100))
+	game.blocks = [lower_board]
+	game.player_pos = Vector2(590, 1000)
+	game.previous_player_pos = game.player_pos
+	game.player_vel = Vector2.ZERO
+	var visible_ghost: Dictionary = game.make_ghost(Vector2(620, 1140), 0)
+	game.ghosts = [visible_ghost]
+	game.cleanup_world()
+	assert(game.blocks.has(lower_board) and game.ghosts.has(visible_ghost), "Visible objects in the expanded lower area must not be cleaned up")
+	game.launch_player()
+	assert(game.rockets[0]["target"] == visible_ghost, "Homing must include the expanded right and lower screen areas")
+	for frame in 30:
+		game.update_rockets(1.0 / 60)
+		if not game.ghosts.has(visible_ghost):
+			break
+	assert(not game.ghosts.has(visible_ghost), "Rockets must reach targets beyond the old screen limits")
+	game.player_pos = Vector2(590, game.WORLD_SIZE.y + 81)
+	game.update_game(0.01)
+	assert(game.health == 2 and game.respawn_platform == lower_board, "A fall must recover onto a board visible in the expanded lower area")
+	var feet_on_screen: Vector2 = game.world_draw_transform() * (game.player_pos + Vector2(0, 48))
+	var board_on_screen: Vector2 = game.platform_layer.transform * (lower_board["pos"] + Vector2(70, 0))
+	assert(feet_on_screen.distance_to(board_on_screen) < 0.01, "Rendered feet must meet the platform after a scaled respawn")
+	reset(game)
+	game.player_pos = Vector2(400, game.CAMERA_TOP - 10)
+	game.player_vel = Vector2.ZERO
+	game.update_game(0.01)
+	assert(is_equal_approx((game.world_draw_transform() * game.player_pos).y, 345.0), "Scrolling must keep the hero at the same readable screen height")
+	assert(game.height_meters > 0, "Zooming out must preserve height scoring")
+
 
 func test_boots(game) -> void:
 	for fps in [30, 60, 120]:

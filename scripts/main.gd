@@ -3,6 +3,10 @@ extends Node2D
 enum Screen { MENU, GAME, GAME_OVER }
 
 const VIEW_SIZE := Vector2(540.0, 960.0)
+const WORLD_SCALE := 0.8
+const WORLD_SIZE := VIEW_SIZE / WORLD_SCALE
+const CAMERA_TOP := 345.0 / WORLD_SCALE
+const FIRST_PLATFORM_Y := 760.0 / WORLD_SCALE
 const SAVE_PATH := "user://brick_bazuka_save.cfg"
 const INITIAL_BLOCK_ROWS := 4
 const BLOCK_GAP_MIN := 250.0
@@ -28,6 +32,8 @@ const GHOST_CALM_DISTANCE := 250.0
 const GHOST_TRANSITION_TIME := 0.12
 const GHOST_DEATH_PLAYBACK_SPEED := 2.0
 const GHOST_DRAW_SIZE := Vector2(92, 92)
+const GHOST_ATTACK_SPEED := 320.0
+const GHOST_ATTACK_ACCELERATION := 850.0
 const MAX_HEALTH := 3
 
 const HERO_TEX := preload("res://assets/characters/main_hero.png")
@@ -195,6 +201,7 @@ func setup_platform_layer() -> void:
 	platform_layer = Node2D.new()
 	platform_layer.name = "Platforms"
 	platform_layer.z_index = -1
+	platform_layer.scale = Vector2.ONE * WORLD_SCALE
 	platform_layer.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	var keyed_material := ShaderMaterial.new()
 	keyed_material.shader = PLATFORM_SHADER
@@ -374,7 +381,7 @@ func start_game() -> void:
 	tilt_control.start()
 	screen = Screen.GAME
 	paused = false
-	player_pos = Vector2(270, 665)
+	player_pos = Vector2(WORLD_SIZE.x * 0.5, FIRST_PLATFORM_Y - 95.0)
 	player_vel = Vector2(0, -80)
 	height_meters = 0.0
 	shoot_timer = 0.0
@@ -405,7 +412,7 @@ func start_game() -> void:
 	ghost_deaths.clear()
 	rockets.clear()
 	particles.clear()
-	spawn_cursor_y = 760.0
+	spawn_cursor_y = FIRST_PLATFORM_Y
 	for i in INITIAL_BLOCK_ROWS:
 		spawn_block(spawn_cursor_y)
 		spawn_cursor_y -= rng.randf_range(BLOCK_GAP_MIN, BLOCK_GAP_MAX)
@@ -430,7 +437,7 @@ func nearest_visible_ghost(origin: Vector2) -> Dictionary:
 	var nearest: Dictionary = {}
 	var nearest_distance := INF
 	for ghost in ghosts:
-		if not Rect2(Vector2.ZERO, VIEW_SIZE).has_point(ghost["pos"]):
+		if not Rect2(Vector2.ZERO, WORLD_SIZE).has_point(ghost["pos"]):
 			continue
 		var distance: float = origin.distance_squared_to(ghost["pos"])
 		if distance < nearest_distance:
@@ -480,14 +487,14 @@ func update_game(delta: float) -> void:
 		player_vel.y += PLAYER_GRAVITY * delta
 	player_vel.x = move_toward(player_vel.x, tilt_control.read_axis() * STEERING_SPEED, STEERING_ACCELERATION * delta)
 	player_pos += player_vel * delta
-	player_pos.x = wrapf(player_pos.x, 0.0, VIEW_SIZE.x)
-	if absf(player_pos.x - previous_player_pos.x) > VIEW_SIZE.x * 0.5:
+	player_pos.x = wrapf(player_pos.x, 0.0, WORLD_SIZE.x)
+	if absf(player_pos.x - previous_player_pos.x) > WORLD_SIZE.x * 0.5:
 		previous_player_pos.x = player_pos.x - player_vel.x * delta
 
 	var camera_shift := 0.0
-	if player_pos.y < 345:
-		camera_shift = 345.0 - player_pos.y
-		player_pos.y = 345.0
+	if player_pos.y < CAMERA_TOP:
+		camera_shift = CAMERA_TOP - player_pos.y
+		player_pos.y = CAMERA_TOP
 		height_meters += camera_shift * 0.19
 		shift_world(camera_shift)
 		previous_player_pos.y += camera_shift
@@ -501,7 +508,7 @@ func update_game(delta: float) -> void:
 	update_particles(delta)
 	check_boots_pickups()
 	check_player_block_collisions()
-	if player_pos.y > 1040:
+	if player_pos.y > WORLD_SIZE.y + 80.0:
 		lose_heart()
 		if screen == Screen.GAME:
 			respawn_on_nearest_platform()
@@ -518,7 +525,7 @@ func respawn_on_nearest_platform() -> void:
 	var nearest: Dictionary = {}
 	var nearest_distance := INF
 	for block in blocks:
-		if block.get("fake", false) or block["pos"].y < 140 or block["pos"].y > 920:
+		if block.get("fake", false) or block["pos"].y < 140.0 / WORLD_SCALE or block["pos"].y > WORLD_SIZE.y - 40.0 / WORLD_SCALE:
 			continue
 		var landing: Vector2 = block["pos"] + Vector2(block["size"].x * 0.5, -48)
 		var distance := player_pos.distance_squared_to(landing)
@@ -526,7 +533,7 @@ func respawn_on_nearest_platform() -> void:
 			nearest_distance = distance
 			nearest = block
 	if nearest.is_empty():
-		nearest = {"pos": Vector2(clampf(player_pos.x - 70, 22, 378), 800), "size": Vector2(140, 48), "skin": 5, "kind": 1, "hp": 2, "max_hp": 2, "spring": false, "fake": false}
+		nearest = {"pos": Vector2(clampf(player_pos.x - 70, 22, WORLD_SIZE.x - 162), 800.0 / WORLD_SCALE), "size": Vector2(140, 48), "skin": 5, "kind": 1, "hp": 2, "max_hp": 2, "spring": false, "fake": false}
 		blocks.append(nearest)
 	respawn_platform = nearest
 	respawn_timer = 0.6
@@ -588,15 +595,15 @@ func spawn_block(y_position: float) -> void:
 	var fake_width := rng.randf_range(85, 110) if has_fake else 0.0
 	var pair_gap := 48.0 if has_fake else 0.0
 	var row_width := width + fake_width + pair_gap
-	var max_amplitude := minf(110.0, (VIEW_SIZE.x - 44.0 - row_width) * 0.5)
+	var max_amplitude := minf(110.0, (WORLD_SIZE.x - 44.0 - row_width) * 0.5)
 	var amplitude := rng.randf_range(50.0, max_amplitude)
-	var row_center := rng.randf_range(22.0 + amplitude, VIEW_SIZE.x - 22.0 - row_width - amplitude)
+	var row_center := rng.randf_range(22.0 + amplitude, WORLD_SIZE.x - 22.0 - row_width - amplitude)
 	var fake_left := has_fake and rng.randf() < 0.5
 	var center_x := row_center + (fake_width + pair_gap if fake_left else 0.0)
 	var phase := rng.randf_range(0.0, TAU)
 	# Keep the first moving platform under the hero for the opening bounce.
-	if blocks.is_empty() and is_equal_approx(y_position, 760.0):
-		center_x = (VIEW_SIZE.x - width) * 0.5
+	if blocks.is_empty() and is_equal_approx(y_position, FIRST_PLATFORM_Y):
+		center_x = (WORLD_SIZE.x - width) * 0.5
 		phase = 0.0
 	var x := center_x + sin(phase) * amplitude
 	var motion_rate := rng.randf_range(PLATFORM_SPEED_MIN, PLATFORM_SPEED_MAX) / amplitude
@@ -620,9 +627,9 @@ func update_ghost_attacks(delta: float) -> void:
 	ghost_attack_timer = rng.randf_range(2.8, 4.2) - minf(height_meters / 2500.0, 1.2)
 	if ghosts.size() >= 3:
 		return
-	var position := Vector2(clampf(player_pos.x + rng.randf_range(-170, 170), 48, 492), player_pos.y + 260)
+	var position := Vector2(clampf(player_pos.x + rng.randf_range(-170, 170), 48, WORLD_SIZE.x - 48), player_pos.y + 260)
 	var ghost := make_ghost(position, 0.0)
-	ghost.merge({"attack": true, "windup": 0.22, "life": 4.5, "vel": Vector2(0, -540), "state": "alert", "previous_state": "alert"}, true)
+	ghost.merge({"attack": true, "windup": 0.35, "life": 4.5, "vel": Vector2(0, -GHOST_ATTACK_SPEED), "state": "alert", "previous_state": "alert"}, true)
 	ghosts.append(ghost)
 
 
@@ -664,7 +671,7 @@ func update_ghosts(delta: float) -> void:
 			if ghost["windup"] <= 0:
 				var target: Vector2 = player_pos + Vector2(player_vel.x * 0.12, -7)
 				var direction: Vector2 = (target - ghost["pos"]).normalized()
-				ghost["vel"] = ghost["vel"].move_toward(direction * 540.0, 1500.0 * delta)
+				ghost["vel"] = ghost["vel"].move_toward(direction * GHOST_ATTACK_SPEED, GHOST_ATTACK_ACCELERATION * delta)
 				ghost["pos"] += ghost["vel"] * delta
 			ghost["animation_time"] = fmod(float(ghost.get("animation_time", 0.0)) + delta, ghost_clip_duration("alert"))
 			ghost["transition"] = GHOST_TRANSITION_TIME
@@ -673,8 +680,8 @@ func update_ghosts(delta: float) -> void:
 		ghost["phase"] = old_phase + delta * 2.2
 		var position: Vector2 = ghost["pos"]
 		position += Vector2(float(ghost["vx"]) * delta, (sin(float(ghost["phase"])) - sin(old_phase)) * 11.0)
-		if position.x < 48.0 or position.x > 492.0:
-			position.x = clampf(position.x, 48, 492)
+		if position.x < 48.0 or position.x > WORLD_SIZE.x - 48.0:
+			position.x = clampf(position.x, 48, WORLD_SIZE.x - 48.0)
 			ghost["vx"] = -float(ghost["vx"])
 		ghost["pos"] = position
 		var state: String = ghost.get("state", "idle")
@@ -747,7 +754,7 @@ func update_rockets(delta: float) -> void:
 			camera_shake = 1.0
 			screen_flash = 0.38
 			rockets.remove_at(index)
-		elif float(rocket["life"]) <= 0.0 or rocket["pos"].y < -140 or rocket["pos"].y > 1100 or rocket["pos"].x < -120 or rocket["pos"].x > 660:
+		elif float(rocket["life"]) <= 0.0 or rocket["pos"].y < -140 or rocket["pos"].y > WORLD_SIZE.y + 140 or rocket["pos"].x < -120 or rocket["pos"].x > WORLD_SIZE.x + 120:
 			rockets.remove_at(index)
 		else:
 			rockets[index] = rocket
@@ -880,10 +887,10 @@ func update_particles(delta: float) -> void:
 
 func cleanup_world() -> void:
 	for index in range(blocks.size() - 1, -1, -1):
-		if blocks[index]["pos"].y > 1030:
+		if blocks[index]["pos"].y > WORLD_SIZE.y + 70:
 			blocks.remove_at(index)
 	for index in range(ghosts.size() - 1, -1, -1):
-		if ghosts[index]["pos"].y > 1080:
+		if ghosts[index]["pos"].y > WORLD_SIZE.y + 120:
 			ghosts.remove_at(index)
 
 
@@ -1022,12 +1029,16 @@ func draw_ghost_deaths() -> void:
 		draw_texture_rect(ghost_frame("death", elapsed), Rect2(death["pos"] - size * 0.5, size), false, Color(1, 1, 1, alpha))
 
 
+func world_draw_transform(origin: Vector2 = Vector2.ZERO, rotation: float = 0.0, local_scale: Vector2 = Vector2.ONE) -> Transform2D:
+	return Transform2D(rotation, local_scale * WORLD_SCALE, 0.0, origin * WORLD_SCALE)
+
+
 func draw_game() -> void:
 	current_shake_offset = Vector2.ZERO
 	if camera_shake > 0.0:
 		current_shake_offset = Vector2(rng.randf_range(-1, 1), rng.randf_range(-1, 1)) * camera_shake * 6.0
-	draw_set_transform(current_shake_offset, 0.0, Vector2.ONE)
-	platform_layer.position = current_shake_offset
+	draw_set_transform_matrix(world_draw_transform(current_shake_offset))
+	platform_layer.position = current_shake_offset * WORLD_SCALE
 	for block in blocks:
 		if block.get("spring", false):
 			draw_texture_rect(SPRING_TEX, spring_rect(block), false)
@@ -1040,9 +1051,9 @@ func draw_game() -> void:
 	draw_ghost_deaths()
 	for rocket in rockets:
 		var rocket_direction: Vector2 = rocket["vel"].normalized()
-		draw_set_transform(current_shake_offset + rocket["pos"], rocket_direction.angle() + PI * 0.5, Vector2.ONE)
+		draw_set_transform_matrix(world_draw_transform(current_shake_offset + rocket["pos"], rocket_direction.angle() + PI * 0.5))
 		draw_texture_rect(ROCKET_TEX, Rect2(-12, -18, 24, 36), false)
-		draw_set_transform(current_shake_offset, 0.0, Vector2.ONE)
+		draw_set_transform_matrix(world_draw_transform(current_shake_offset))
 	draw_particles()
 	draw_player()
 	draw_game_hud()
@@ -1075,7 +1086,7 @@ func draw_player() -> void:
 	var weapon_recoil_offset := -aim_direction * weapon_kick * 11.0
 	var weapon_origin := weapon_pivot + weapon_recoil_offset
 	var weapon_draw_state := get_weapon_draw_state()
-	draw_set_transform(weapon_origin, weapon_draw_state["rotation"], weapon_draw_state["scale"])
+	draw_set_transform_matrix(world_draw_transform(weapon_origin, weapon_draw_state["rotation"], weapon_draw_state["scale"]))
 	draw_texture_rect(BAZOOKA_BODY_TEX, Rect2(-68, -31, 80, 63), false)
 	if shoot_timer > 0:
 		draw_circle(Vector2(-68, 0), 9 + shoot_timer * 24, Color(1, 0.82, 0.22, shoot_timer * 3.4))
@@ -1083,9 +1094,9 @@ func draw_player() -> void:
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	var label_offset := Vector2(-36, -2) if weapon_draw_state["points_left"] else Vector2(36, -2)
 	var label_position := weapon_origin + label_offset.rotated(weapon_draw_state["rotation"])
-	draw_set_transform(label_position, weapon_draw_state["rotation"], Vector2.ONE)
+	draw_set_transform_matrix(world_draw_transform(label_position, weapon_draw_state["rotation"]))
 	draw_label("SNW", Vector2(-13, 4), 9, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 26, 1)
-	draw_set_transform(player_pos + current_shake_offset, body_rotation, scale_value)
+	draw_set_transform_matrix(world_draw_transform(player_pos + current_shake_offset, body_rotation, scale_value))
 	if jet_timer > 0.0:
 		draw_texture_rect(HERO_BODY_TEX, Rect2(-67, -57, 134, 114), false, tint)
 	else:

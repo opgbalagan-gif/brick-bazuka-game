@@ -199,7 +199,7 @@ func _run() -> void:
 	game.height_meters = 88
 	for expected_health in [2, 1, 0]:
 		game.respawn_timer = 0.0
-		game.player_pos = Vector2(270, 1041)
+		game.player_pos = Vector2(270, game.WORLD_SIZE.y + 81)
 		game.player_vel = Vector2.ZERO
 		# A ghost at the fall boundary must not charge a second life in the same frame.
 		game.ghosts = [game.make_ghost(game.player_pos + Vector2(0, -7), 0.0)]
@@ -317,13 +317,13 @@ func _test_screen_wrap(game) -> void:
 			game.blocks.clear()
 			game.ghosts.clear()
 			game.spawn_cursor_y = -100000.0
-			game.player_pos = Vector2(1 if direction < 0 else 539, 500)
+			game.player_pos = Vector2(1 if direction < 0 else game.WORLD_SIZE.x - 1, 500)
 			game.player_vel = Vector2(direction * game.STEERING_SPEED, -100)
 			game.tilt_control.axis = direction
 			var delta := 1.0 / float(frames_per_second)
 			game.update_game(delta)
 			if direction < 0:
-				assert(game.player_pos.x > 529 and game.player_pos.x < 540, "Leaving the left edge must enter from the right")
+				assert(game.player_pos.x > game.WORLD_SIZE.x - 11 and game.player_pos.x < game.WORLD_SIZE.x, "Leaving the left edge must enter from the right")
 			else:
 				assert(game.player_pos.x > 0 and game.player_pos.x < 11, "Leaving the right edge must enter from the left")
 			assert(is_equal_approx(game.player_vel.x, direction * game.STEERING_SPEED), "Wrapping must preserve horizontal speed and direction")
@@ -358,7 +358,7 @@ func _test_moving_platforms(game) -> void:
 		moved_right = moved_right or game.blocks[0]["pos"].x > previous_x + 0.01
 		for index in game.blocks.size():
 			var block: Dictionary = game.blocks[index]
-			assert(block["pos"].x >= 21.99 and block["pos"].x + block["size"].x <= 518.01, "The full platform must remain inside the screen")
+			assert(block["pos"].x >= 21.99 and block["pos"].x + block["size"].x <= game.WORLD_SIZE.x - 21.99, "The full platform must remain inside the screen")
 			assert(block["pos"].y == initial_blocks[index]["pos"].y, "Horizontal motion must preserve platform heights")
 			if block["spring"]:
 				assert(is_equal_approx(game.spring_rect(block).get_center().x, block["pos"].x + block["size"].x * 0.5), "The spring must stay attached to its moving platform")

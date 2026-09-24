@@ -54,7 +54,7 @@ func test_generation(game) -> void:
 		for frame in 900:
 			game.update_platforms(1.0 / 30.0)
 			for block in game.blocks:
-				assert(block["pos"].x >= 21.99 and block["pos"].x + block["size"].x <= 518.01, "Both ends of every platform must remain on screen")
+				assert(block["pos"].x >= 21.99 and block["pos"].x + block["size"].x <= game.WORLD_SIZE.x - 21.99, "Both ends of every platform must remain on screen")
 			for pair in pairs:
 				var left: Dictionary = pair[0] if pair[0]["pos"].x < pair[1]["pos"].x else pair[1]
 				var right: Dictionary = pair[1] if pair[0]["pos"].x < pair[1]["pos"].x else pair[0]
