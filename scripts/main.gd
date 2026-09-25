@@ -321,15 +321,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			handle_press(event.position)
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-		if screen == Screen.GAME and not paused and not tilt_control.needs_permission():
-			tutorial_visible = false
-			touch_control.handle_event(event)
-		elif event.pressed:
+		if event.pressed:
 			handle_press(event.position)
-		return
-	if event is InputEventMouseMotion:
-		if screen == Screen.GAME and not paused:
-			touch_control.handle_event(event)
 		return
 	if event is InputEventKey and event.pressed and not event.echo:
 		var key: int = event.physical_keycode if event.physical_keycode != 0 else event.keycode
@@ -1067,12 +1060,17 @@ func draw_menu() -> void:
 	draw_rect(cta_rect.grow(3), Color(0.59, 1.0, 0.13, pulse), false, 3)
 	if tilt_control.uses_keyboard():
 		draw_keyboard_help(852.0, true)
+	else:
+		draw_panel(Rect2(40, 852, 460, 88), Color(0.02, 0.07, 0.12, 0.94), CYAN, 2, 10)
+		draw_label("УДЕРЖИВАЙ ПАЛЕЦ ИЛИ ВЕДИ В СТОРОНУ", Vector2(40, 880), 17, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 460, 1)
+		draw_label("КОРОТКИЙ ТАП — ВЫСТРЕЛ", Vector2(40, 905), 17, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 460, 1)
+		draw_label("ПРЫЖКИ И ПРИЦЕЛИВАНИЕ — АВТОМАТИЧЕСКИ", Vector2(40, 927), 13, PALE_CYAN, HORIZONTAL_ALIGNMENT_CENTER, 460, 1)
 
 
 func draw_keyboard_help(top: float, show_start: bool = false) -> void:
 	draw_panel(Rect2(40, top, 460, 88), Color(0.02, 0.07, 0.12, 0.94), CYAN, 2, 10)
-	draw_label("ЗАЖМИ И ВЕДИ МЫШЬЮ  ·  СТРЕЛКИ / A D", Vector2(40, top + 28), 17, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 460, 1)
-	draw_label("КОРОТКИЙ КЛИК / ПРОБЕЛ — РАКЕТА", Vector2(40, top + 53), 16, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 460, 1)
+	draw_label("СТРЕЛКИ / A D — ДВИЖЕНИЕ", Vector2(40, top + 28), 17, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 460, 1)
+	draw_label("ПРОБЕЛ — РАКЕТА", Vector2(40, top + 53), 16, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 460, 1)
 	var hint := "ENTER — НАЧАТЬ" if show_start else "ПРЫЖКИ И ПРИЦЕЛИВАНИЕ — АВТОМАТИЧЕСКИ"
 	draw_label(hint, Vector2(40, top + 75), 13, PALE_CYAN, HORIZONTAL_ALIGNMENT_CENTER, 460, 1)
 

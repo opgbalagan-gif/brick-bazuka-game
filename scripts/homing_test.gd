@@ -132,10 +132,10 @@ func _run() -> void:
 	click.position = Vector2(20, 900)
 	click.pressed = true
 	game._unhandled_input(click)
-	assert(game.rockets.is_empty(), "Mouse press must wait to distinguish a click from dragging")
+	assert(game.rockets.size() == 1, "A desktop preview click must fire without enabling mouse steering")
 	click.pressed = false
 	game._unhandled_input(click)
-	assert(game.rockets.size() == 1, "A short mouse click must fire exactly once on release")
+	assert(game.rockets.size() == 1, "Releasing a desktop preview click must not fire twice")
 	game.update_rockets(1.0 / 60.0)
 	assert(game.ghosts.is_empty(), "A ghost closer than the muzzle must still be hit")
 	_reset(game)

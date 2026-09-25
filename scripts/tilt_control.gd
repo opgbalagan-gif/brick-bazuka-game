@@ -26,8 +26,9 @@ func needs_permission() -> bool:
 
 
 func uses_keyboard() -> bool:
-	if web_input != null:
-		return not bool(web_input.is_mobile())
+	# The published browser game introduces phone controls on every device.
+	if OS.has_feature("web"):
+		return false
 	return not (OS.has_feature("android") or OS.has_feature("ios"))
 
 
