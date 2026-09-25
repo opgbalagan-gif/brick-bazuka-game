@@ -34,3 +34,14 @@ html = re.sub(r'\s*<script src="name-input\.js(?:\?v=[a-f0-9]+)?"></script>', ''
 html = html.replace('<script src="index.js"></script>', f'<script src="name-input.js?v={name_version}"></script>\n\t\t<script src="index.js"></script>')
 page.write_text(html, encoding="utf-8")
 print(f"Web build: {version}")
+
+api_source = (root / "scripts" / "leaderboard.gd").read_text(encoding="utf-8")
+api_url = re.search(r'const API_URL := "([^"]+)"', api_source).group(1)
+board_script = (root / "web" / "leaderboard.js").read_bytes()
+(root / "docs" / "leaderboard.js").write_bytes(board_script)
+board_version = hashlib.sha256(board_script).hexdigest()[:12]
+board_html = (root / "web" / "leaderboard.html").read_text(encoding="utf-8").replace("__API_URL__", api_url)
+board_html = board_html.replace('src="leaderboard.js"', f'src="leaderboard.js?v={board_version}"')
+board_html = board_html.replace('href="./"', f'href="./?v={version}"')
+(root / "docs" / "leaderboard.html").write_text(board_html, encoding="utf-8")
+(root / "docs" / "leaderboard-snapshot.json").write_bytes((root / "assets" / "data" / "leaderboard_snapshot.json").read_bytes())

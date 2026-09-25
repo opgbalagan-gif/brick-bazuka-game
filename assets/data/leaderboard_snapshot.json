@@ -1,0 +1,26 @@
+{
+  "game": "brick-bazuka",
+  "rows": [
+    {
+      "rank": 1,
+      "name": "snoopy",
+      "score": 2919
+    },
+    {
+      "rank": 2,
+      "name": "толя",
+      "score": 905
+    },
+    {
+      "rank": 3,
+      "name": "толя",
+      "score": 197
+    },
+    {
+      "rank": 4,
+      "name": "test",
+      "score": 0
+    }
+  ],
+  "updatedAt": "2026-09-25T21:00:00.944Z"
+}

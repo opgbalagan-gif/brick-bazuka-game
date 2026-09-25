@@ -20,7 +20,7 @@ godot --path .
 - A short tap fires once on release at the nearest visible ghost. Holds and swipes do not shoot. A second finger can tap to shoot while the first keeps steering. Canceled touches, focus loss, pause, results and restart clear gesture state.
 - The **НАКЛОН** button switches to optional phone tilt. On iPhone, then tap **ВКЛЮЧИТЬ НАКЛОН** and allow motion/orientation access. **ПАЛЕЦ** switches back. Each run calibrates the initial phone position as neutral; a 3-degree dead zone filters hand tremors. Rotation and returning from a hidden tab recalibrate the sensor. Sensor access requires HTTPS (or localhost); finger controls work without sensor support or permission.
 - On desktop, use **←/→** or physical **A/D** (**Ф/В** on a Russian layout) to move. The first movement key dismisses the introductory overlay and starts play. Keyboard hints appear on the title screen and before the first move; platform jumps remain automatic. Taps and clicks fire independently of movement.
-- Desktop clicks fire immediately at the nearest visible ghost. Touch taps fire on release so the same surface can distinguish swipes and holds. No manual aiming is needed.
+- Mouse controls match finger controls: hold the left/right half or hold the left button and drag horizontally to steer. A short click fires on release; dragging and releasing a hold do not shoot. Space can fire while the mouse keeps steering. No manual aiming is needed.
 - The hero faces horizontal travel and keeps the last facing during vertical flight. Lean follows movement; shooting never reverses the body. The bazooka aims independently behind the hero so it cannot cover the face.
 - Rockets leave the bazooka's downward-facing muzzle, clear the barrel for 0.08 seconds, then track the selected ghost as it moves. If it disappears, they seek another visible ghost; with no ghosts, a shot continues straight down. Shooting does not change the hero's position, velocity or trajectory in any direction.
 - Enter or Space: start from the title screen; during play, fire a homing rocket. Either key also resumes a paused run without firing.
@@ -42,6 +42,7 @@ godot --path .
 - Generated platform rows glide left and right with smooth turns, independent phases, 50–110 pixels of travel each way and peak speeds of 35–60 pixels per second. Rows with decoys have less travel when needed to keep both platforms inside the screen. Springs and collision areas follow the platforms; pausing, the introductory hint and sensor permission freeze their motion. The first platform begins under the hero.
 - Rockets pass through all platforms and springs, hitting only ghosts. Their explosions also leave platforms intact. Landing still damages platforms: reinforced stone takes two landings and cracks after the first; destroyed bricks create debris.
 - Ghost enemies appear 260 world units below the hero, materialize for 0.35 seconds, then approach at up to 320 world units/second (previously 540). They turn with gentler acceleration, giving more time to react. Attacks begin after 2.5 seconds and recur every few seconds, becoming more frequent at greater heights. At most three attackers coexist; missed attacks expire after 4.5 seconds. Collision checks cover the traveled path so attacks and jet flight cannot pass through each other unnoticed.
+- Ambient ghosts also inhabit the route, including the opening section. They drift at 25–42 world units/second, appear every 2–4 eligible rows, and do not use the attack slots. Spring and jet-boot rows postpone ambient spawns to keep pickups clear. They can be shot or defeated during jet flight like attacking ghosts.
 - A rocket, nearby explosion or jet-boot collision removes the ghost immediately and plays the supplied death animation once. Otherwise touching an attacking ghost consumes one of three lives, with brief invulnerability and knockback; that attacker disappears after the hit.
 - Ghost death plays at twice the source speed, completing the whole dispersal in about 0.92 seconds.
 - Falling below the screen consumes one life. If lives remain, the hero respawns on the nearest visible non-fake platform, follows its movement for 0.6 seconds, then resumes jumping. Respawning does not damage the platform or reset the height score. Nearby ghosts are cleared and two seconds of protection give room to recover. If no safe platform remains, a recovery platform is provided. Losing the last life opens the leaderboard.
@@ -50,7 +51,8 @@ godot --path .
 - Landing on a platform produces a jump sized for the maximum 310-pixel platform gap plus 60 pixels of clearance. Firing cannot boost or redirect it.
 - Movement and weapon strength are fixed. The game has no currency, collectible money, paid upgrades or cash rewards.
 - Best height, destroyed-platform count and settings save to `user://brick_bazuka_save.cfg`. Old currency and upgrade fields are ignored on load and removed on the next save.
-- At the end of a run, players enter a name and publish their score to a shared top-10 leaderboard. The name is remembered for the next attempt; repeat submissions do not duplicate a run. Scores use a separate private Google Sheet on the existing SOLLERS Apps Script service. Setup and API: [server/google-sheets/README.md](server/google-sheets/README.md).
+- The РЕЙТИНГ button opens the board from the menu or pauses the current game. Closing it resumes that same run. A lightweight standalone `leaderboard.html` is also published beside the game. A valid name is saved on the device immediately, independently of network access, and becomes read-only beside ИЗМЕНИТЬ. The Web game and standalone page share the name through localStorage; separate devices/browsers set their own names.
+- Ratings preserve the last real downloaded table and label its update time during outages, with a dated public snapshot included in each release. Failed requests retry automatically with backoff. Score submissions persist on the device across restarts and retry the same signed run until confirmed, avoiding duplicate rows. Server-rejected or expired submissions remain local and are marked accordingly; offline scores are never presented as confirmed public results. Scores use a separate private Google Sheet on the existing SOLLERS Apps Script service. Setup and API: [server/google-sheets/README.md](server/google-sheets/README.md).
 
 ## Asset layout
 
@@ -83,6 +85,8 @@ godot --headless --path . --script res://scripts/homing_test.gd
 godot --headless --path . --script res://scripts/fake_platform_test.gd
 godot --headless --path . --script res://scripts/gameplay_fixes_test.gd
 godot --headless --path . --script res://scripts/touch_control_test.gd
+godot --headless --path . --script res://scripts/mouse_ambient_test.gd
+godot --headless --path . --script res://scripts/rating_reliability_test.gd
 node scripts/test_name_input.mjs
 node scripts/test_tilt.mjs
 ```

@@ -40,6 +40,8 @@
   window.visualViewport?.addEventListener('resize', place);
   window.visualViewport?.addEventListener('scroll', place);
   window.BrickNameInput = {
+    get_saved_name() { try { return localStorage.getItem('brick-player-name') || ''; } catch (_) { return ''; } },
+    save_name(value) { try { localStorage.setItem('brick-player-name', String(value)); } catch (_) {} },
     open(value, editable) {
       input.value = String(value).slice(0, 20);
       input.readOnly = !editable;

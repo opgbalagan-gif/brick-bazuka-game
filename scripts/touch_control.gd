@@ -19,6 +19,24 @@ func reset() -> void:
 
 
 func handle_event(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		var pointer := InputEventScreenTouch.new()
+		pointer.index = 10000
+		pointer.position = event.position
+		pointer.pressed = event.pressed
+		handle_event(pointer)
+		return
+	if event is InputEventMouseMotion and touches.has(10000):
+		if not event.button_mask & MOUSE_BUTTON_MASK_LEFT:
+			touches.erase(10000)
+			primary_id = -1 if touches.is_empty() else int(touches.keys()[0])
+			update_axis()
+			return
+		var pointer := InputEventScreenDrag.new()
+		pointer.index = 10000
+		pointer.position = event.position
+		handle_event(pointer)
+		return
 	if event is InputEventScreenTouch:
 		if event.pressed:
 			touches[event.index] = {"origin": event.position, "pos": event.position, "age": 0.0, "drag": false, "held": false}

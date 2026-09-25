@@ -162,6 +162,9 @@ var background_video: VideoStreamPlayer
 
 var cta_rect := Rect2(151, 754, 238, 90)
 var touch_control: Node
+var leaderboard_button: Button
+var board_was_paused := false
+var ambient_rows_until_ghost := 1
 
 
 func _ready() -> void:
@@ -182,11 +185,18 @@ func _ready() -> void:
 	setup_video_background()
 	setup_platform_layer()
 	leaderboard = LEADERBOARD_UI.new()
+	leaderboard.storage_path = profile_path + ".rating"
 	leaderboard.last_name = player_name
 	leaderboard.restart_requested.connect(start_game)
 	leaderboard.home_requested.connect(return_to_menu)
 	leaderboard.player_name_changed.connect(func(value: String): player_name = value; save_profile())
+	leaderboard.browse_closed.connect(close_leaderboard)
 	add_child(leaderboard)
+	leaderboard_button = leaderboard._button("РЕЙТИНГ")
+	leaderboard_button.size = Vector2(136, 42)
+	leaderboard_button.z_index = 15
+	leaderboard_button.pressed.connect(open_leaderboard)
+	add_child(leaderboard_button)
 	if OS.get_cmdline_user_args().has("--capture-game"):
 		start_game()
 		tutorial_visible = false
@@ -301,7 +311,7 @@ func _notification(what: int) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if screen == Screen.GAME_OVER:
+	if screen == Screen.GAME_OVER or leaderboard.visible:
 		return
 	if event is InputEventScreenTouch or event is InputEventScreenDrag:
 		if screen == Screen.GAME and not paused and not tilt_control.needs_permission():
@@ -311,8 +321,15 @@ func _unhandled_input(event: InputEvent) -> void:
 			handle_press(event.position)
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-		if event.pressed:
+		if screen == Screen.GAME and not paused and not tilt_control.needs_permission():
+			tutorial_visible = false
+			touch_control.handle_event(event)
+		elif event.pressed:
 			handle_press(event.position)
+		return
+	if event is InputEventMouseMotion:
+		if screen == Screen.GAME and not paused:
+			touch_control.handle_event(event)
 		return
 	if event is InputEventKey and event.pressed and not event.echo:
 		var key: int = event.physical_keycode if event.physical_keycode != 0 else event.keycode
@@ -415,6 +432,7 @@ func start_game() -> void:
 	platforms_until_boots = 5
 	jet_timer = 0.0
 	ghost_attack_timer = 2.5
+	ambient_rows_until_ghost = 1
 	respawn_timer = 0.0
 	respawn_platform = {}
 	previous_player_pos = player_pos
@@ -452,6 +470,21 @@ func return_to_menu() -> void:
 	tutorial_visible = false
 	sync_video_background()
 	save_profile()
+
+
+func open_leaderboard() -> void:
+	board_was_paused = paused
+	if screen == Screen.GAME:
+		paused = true
+	touch_control.reset()
+	tilt_control.stop()
+	leaderboard.show_board()
+
+
+func close_leaderboard() -> void:
+	paused = board_was_paused
+	if screen == Screen.GAME:
+		tilt_control.start()
 
 
 func nearest_visible_ghost(origin: Vector2) -> Dictionary:
@@ -640,6 +673,13 @@ func spawn_block(y_position: float) -> void:
 	blocks.append({"pos": Vector2(x, y_position), "size": size, "skin": skin, "kind": int(art["kind"]), "hp": hp, "max_hp": hp, "spring": has_spring,
 		"fake": false, "boots": has_boots,
 		"motion_center": center_x, "motion_amplitude": amplitude, "motion_phase": phase, "motion_rate": motion_rate})
+	ambient_rows_until_ghost -= 1
+	if ambient_rows_until_ghost <= 0 and y_position < FIRST_PLATFORM_Y - 150 and not has_spring and not has_boots:
+		ambient_rows_until_ghost = rng.randi_range(2, 4)
+		var ghost_x := clampf(x + width * 0.5 + (-110.0 if x > WORLD_SIZE.x * 0.5 else 110.0), 48, WORLD_SIZE.x - 48)
+		var ghost := make_ghost(Vector2(ghost_x, y_position - 110), rng.randf_range(25, 42) * (-1 if rng.randf() < 0.5 else 1))
+		ghost["ambient"] = true
+		ghosts.append(ghost)
 
 
 func update_ghost_attacks(delta: float) -> void:
@@ -647,7 +687,7 @@ func update_ghost_attacks(delta: float) -> void:
 	if ghost_attack_timer > 0.0:
 		return
 	ghost_attack_timer = rng.randf_range(2.8, 4.2) - minf(height_meters / 2500.0, 1.2)
-	if ghosts.size() >= 3:
+	if ghosts.filter(func(ghost): return ghost.get("attack", false)).size() >= 3:
 		return
 	var position := Vector2(clampf(player_pos.x + rng.randf_range(-170, 170), 48, WORLD_SIZE.x - 48), player_pos.y + 260)
 	var ghost := make_ghost(position, 0.0)
@@ -1005,6 +1045,9 @@ func _exit_tree() -> void:
 
 
 func _draw() -> void:
+	if is_instance_valid(leaderboard_button):
+		leaderboard_button.visible = not leaderboard.visible and screen != Screen.GAME_OVER
+		leaderboard_button.position = Vector2(16, 16) if screen == Screen.MENU else Vector2(388, 161)
 	if is_instance_valid(platform_layer):
 		platform_layer.visible = screen != Screen.MENU
 		platform_layer.queue_redraw()
@@ -1028,8 +1071,8 @@ func draw_menu() -> void:
 
 func draw_keyboard_help(top: float, show_start: bool = false) -> void:
 	draw_panel(Rect2(40, top, 460, 88), Color(0.02, 0.07, 0.12, 0.94), CYAN, 2, 10)
-	draw_label("СТРЕЛКИ / A D — ДВИЖЕНИЕ", Vector2(40, top + 28), 19, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 460, 1)
-	draw_label("КЛИК / ПРОБЕЛ — РАКЕТА   ·   ESC — ПАУЗА", Vector2(40, top + 53), 16, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 460, 1)
+	draw_label("ЗАЖМИ И ВЕДИ МЫШЬЮ  ·  СТРЕЛКИ / A D", Vector2(40, top + 28), 17, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 460, 1)
+	draw_label("КОРОТКИЙ КЛИК / ПРОБЕЛ — РАКЕТА", Vector2(40, top + 53), 16, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 460, 1)
 	var hint := "ENTER — НАЧАТЬ" if show_start else "ПРЫЖКИ И ПРИЦЕЛИВАНИЕ — АВТОМАТИЧЕСКИ"
 	draw_label(hint, Vector2(40, top + 75), 13, PALE_CYAN, HORIZONTAL_ALIGNMENT_CENTER, 460, 1)
 
