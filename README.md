@@ -22,7 +22,7 @@ godot --path .
 - On desktop, use **←/→** or physical **A/D** (**Ф/В** on a Russian layout) to move. The first movement key dismisses the introductory overlay and starts play. Keyboard hints appear on the title screen and before the first move; platform jumps remain automatic. Taps and clicks fire independently of movement.
 - The published Web game introduces phone controls in the menu and first-play hint on every device. Mouse movement and holds do not steer the hero; a desktop preview can still use the keyboard and click to fire.
 - The hero faces horizontal travel and keeps the last facing during vertical flight. Lean follows movement; shooting never reverses the body. The bazooka aims independently behind the hero so it cannot cover the face.
-- Rockets leave the bazooka's downward-facing muzzle, clear the barrel for 0.08 seconds, then track the selected ghost as it moves. If it disappears, they seek another visible ghost; with no ghosts, a shot continues straight down. Shooting does not change the hero's position, velocity or trajectory in any direction.
+- At each shot the bazooka points toward the nearest visible ghost, holds that launch angle for 0.20 seconds, then smoothly returns to its downward rest pose over 0.24 seconds. It does not follow the rocket or a moving target afterward. Pause freezes the pose and restart resets it. Rockets leave the aimed muzzle, clear the barrel for 0.08 seconds, then track the selected ghost as it moves. If it disappears, they seek another visible ghost; with no ghosts, a shot continues straight down. Shooting does not change the hero's position, velocity or trajectory in any direction.
 - Enter or Space: start from the title screen; during play, fire a homing rocket. Either key also resumes a paused run without firing.
 - Escape: pause.
 - The title screen has one active control: START. Its painted button launches the game.
@@ -82,6 +82,7 @@ The same step installs and versions `web/tilt-control.js` in the Web build befor
 godot --headless --path . --script res://scripts/smoke_test.gd
 godot --headless --path . --script res://scripts/keyboard_test.gd
 godot --headless --path . --script res://scripts/homing_test.gd
+godot --headless --path . --script res://scripts/weapon_pose_test.gd
 godot --headless --path . --script res://scripts/fake_platform_test.gd
 godot --headless --path . --script res://scripts/gameplay_fixes_test.gd
 godot --headless --path . --script res://scripts/touch_control_test.gd

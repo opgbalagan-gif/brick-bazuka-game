@@ -24,6 +24,8 @@ const STEERING_ACCELERATION := 1800.0
 const ROCKET_SPEED := 690.0
 const ROCKET_TURN_SPEED := 10.0
 const ROCKET_LAUNCH_TIME := 0.08
+const WEAPON_HOLD_TIME := 0.20
+const WEAPON_RETURN_TIME := 0.24
 const JET_DURATION := 2.8
 const JET_SPEED := 820.0
 const BOOTS_SIZE := Vector2(58, 58)
@@ -146,6 +148,7 @@ var last_shot_direction := Vector2.DOWN
 var aim_direction := Vector2.DOWN
 var visual_body_rotation := 0.0
 var visual_weapon_rotation := PI * 0.5
+var weapon_pose_timer := 0.0
 var weapon_kick := 0.0
 var facing_left := false
 var weapon_anchor_x := 22.0
@@ -343,15 +346,16 @@ func _unhandled_input(event: InputEvent) -> void:
 				touch_control.reset()
 
 
-func update_aim_target(position: Vector2) -> void:
-	var solution := get_aim_solution(position)
-	aim_direction = solution["direction"]
-
-
 func update_visual_controller(delta: float) -> void:
-	var desired_weapon_angle := aim_direction.angle()
-	var weapon_weight := 1.0 - exp(-20.0 * delta)
-	visual_weapon_rotation = lerp_angle(visual_weapon_rotation, desired_weapon_angle, weapon_weight)
+	weapon_pose_timer = maxf(0.0, weapon_pose_timer - delta)
+	if weapon_pose_timer > WEAPON_RETURN_TIME:
+		visual_weapon_rotation = last_shot_direction.angle()
+	elif weapon_pose_timer > 0.0:
+		var progress := smoothstep(0.0, WEAPON_RETURN_TIME, WEAPON_RETURN_TIME - weapon_pose_timer)
+		visual_weapon_rotation = lerp_angle(last_shot_direction.angle(), PI * 0.5, progress)
+	else:
+		visual_weapon_rotation = PI * 0.5
+	aim_direction = Vector2.from_angle(visual_weapon_rotation)
 	if absf(player_vel.x) > 12.0:
 		facing_left = player_vel.x < 0.0
 	var desired_body_rotation := clampf(player_vel.x / STEERING_SPEED * deg_to_rad(20.0), -deg_to_rad(28.0), deg_to_rad(28.0))
@@ -436,6 +440,7 @@ func start_game() -> void:
 	aim_direction = Vector2.DOWN
 	visual_body_rotation = 0.0
 	visual_weapon_rotation = PI * 0.5
+	weapon_pose_timer = 0.0
 	facing_left = false
 	weapon_anchor_x = 22.0
 	blocks.clear()
@@ -497,13 +502,15 @@ func launch_player(_tap_position: Vector2 = Vector2.ZERO) -> void:
 	if screen != Screen.GAME or paused or tilt_control.needs_permission() or reload_timer > 0.0:
 		return
 	var ghost := nearest_visible_ghost(player_pos)
-	# Leave the downward-facing barrel before homing toward the selected ghost.
-	var solution := get_aim_solution(get_weapon_pivot() + Vector2.DOWN * 260.0)
+	# Freeze the launch direction; only the rocket follows the target afterward.
+	var target: Vector2 = ghost["pos"] if not ghost.is_empty() else get_weapon_pivot() + Vector2.DOWN * 260.0
+	var solution := get_aim_solution(target)
 	var muzzle_position: Vector2 = solution["muzzle"]
 	var shot_direction: Vector2 = solution["direction"]
 	last_shot_direction = shot_direction
 	aim_direction = shot_direction
 	visual_weapon_rotation = shot_direction.angle()
+	weapon_pose_timer = WEAPON_HOLD_TIME + WEAPON_RETURN_TIME
 	reload_timer = 0.56
 	shoot_timer = 0.20
 	weapon_kick = 1.0
@@ -523,6 +530,7 @@ func update_game(delta: float) -> void:
 		respawn_timer = maxf(0.0, respawn_timer - delta)
 		if respawn_timer == 0.0:
 			player_vel = Vector2(0, -PLATFORM_BOUNCE_SPEED)
+		update_visual_controller(delta)
 		return
 	previous_player_pos = player_pos
 	if jet_timer > 0.0:

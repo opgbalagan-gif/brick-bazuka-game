@@ -27,6 +27,12 @@ func _init() -> void:
 	_run.call_deferred()
 
 
+func _fire_at(game, target: Vector2) -> void:
+	game.reload_timer = 0.0
+	game.ghosts = [game.make_ghost(target, 0)]
+	game.launch_player()
+
+
 func _run() -> void:
 	var legacy_profile := ConfigFile.new()
 	legacy_profile.set_value("progress", "money", 99999)
@@ -74,14 +80,13 @@ func _run() -> void:
 	game.player_vel = Vector2.ZERO
 	var shot_target: Vector2 = game.player_pos + Vector2(140, 240)
 	game.ghosts = [game.make_ghost(shot_target, 0)]
-	game.update_aim_target(shot_target)
 	assert(not game.facing_left, "Firing must preserve the idle hero's facing")
-	var solution: Dictionary = game.get_aim_solution(game.get_weapon_pivot() + Vector2.DOWN * 260.0)
+	var solution: Dictionary = game.get_aim_solution(shot_target)
 	var expected_shot_direction: Vector2 = solution["direction"]
 	game.launch_player(shot_target)
 	assert(game.rockets.size() == 1, "A shot must create one rocket")
 	assert(game.rockets[0]["pos"].distance_to(solution["muzzle"]) < 0.01, "Rocket must spawn at the rotating muzzle")
-	assert(game.rockets[0]["vel"].normalized().dot(expected_shot_direction) > 0.99, "Rocket must leave the bazooka downward before homing")
+	assert(game.rockets[0]["vel"].normalized().dot(expected_shot_direction) > 0.99, "Rocket must leave the bazooka toward the selected target before homing")
 	assert(game.player_vel == Vector2.ZERO, "Firing down-right must not move the hero")
 	var rocket_count: int = game.rockets.size()
 	game.launch_player(shot_target)
@@ -90,7 +95,6 @@ func _run() -> void:
 	game.player_vel = Vector2.ZERO
 	var down_target: Vector2 = game.player_pos + Vector2(0, 260)
 	game.ghosts = [game.make_ghost(down_target, 0)]
-	game.update_aim_target(down_target)
 	var down_solution: Dictionary = game.get_aim_solution(down_target)
 	game.launch_player(down_target)
 	assert(absf(down_solution["direction"].x) < 0.12 and game.player_vel == Vector2.ZERO, "Downward shots must preserve player velocity")
@@ -98,7 +102,6 @@ func _run() -> void:
 	game.player_vel = Vector2.ZERO
 	var left_target: Vector2 = game.player_pos + Vector2(-140, 240)
 	game.ghosts = [game.make_ghost(left_target, 0)]
-	game.update_aim_target(left_target)
 	assert(not game.facing_left, "Shooting left must not turn a stationary hero")
 	game.launch_player(left_target)
 	assert(game.player_vel == Vector2.ZERO, "Firing down-left must not move the hero")
@@ -124,26 +127,26 @@ func _run() -> void:
 
 	var aim_sequence := [Vector2(-130, 250), Vector2(130, 250), Vector2(0, 260), Vector2(-130, 250)]
 	for offset in aim_sequence:
-		game.update_aim_target(game.player_pos + offset)
+		_fire_at(game, game.player_pos + offset)
 		for frame in 5:
 			game.update_visual_controller(1.0 / 60.0)
 		assert(absf(game.visual_body_rotation) <= deg_to_rad(50.1), "Body lean must remain controlled")
 		assert(is_finite(game.visual_weapon_rotation), "Weapon rotation must remain stable")
-	game.update_aim_target(game.player_pos + Vector2(130, 250))
+	_fire_at(game, game.player_pos + Vector2(130, 250))
 	game.player_vel.x = 220
 	game.update_visual_controller(0.12)
 	assert(game.visual_body_rotation > 0, "Rightward movement must lean the body clockwise")
 	var weapon_error := absf(angle_difference(game.visual_weapon_rotation, game.aim_direction.angle()))
-	assert(weapon_error < 0.25, "Bazooka must track the aim quickly")
+	assert(weapon_error < 0.001, "Bazooka must retain the shot angle during its hold")
 	var right_draw_state: Dictionary = game.get_weapon_draw_state()
 	assert(right_draw_state["scale"].x < 0, "Right-facing bazooka must use a horizontal mirror")
 	assert(absf(wrapf(right_draw_state["rotation"], -PI, PI)) <= PI * 0.5, "Right-facing bazooka must stay upright")
-	game.update_aim_target(game.player_pos + Vector2(-130, 250))
+	_fire_at(game, game.player_pos + Vector2(-130, 250))
 	var pivot_before_flip: Vector2 = game.get_weapon_pivot()
-	game.update_aim_target(game.player_pos + Vector2(130, 250))
+	_fire_at(game, game.player_pos + Vector2(130, 250))
 	var pivot_before_smoothing: Vector2 = game.get_weapon_pivot()
 	assert(pivot_before_flip.distance_to(pivot_before_smoothing) < 0.01, "Flip must not teleport the weapon anchor")
-	game.update_aim_target(game.player_pos + Vector2(-130, 250))
+	_fire_at(game, game.player_pos + Vector2(-130, 250))
 	game.player_vel.x = -220
 	for frame in 12:
 		game.update_visual_controller(1.0 / 60.0)
@@ -152,7 +155,7 @@ func _run() -> void:
 	var left_draw_state: Dictionary = game.get_weapon_draw_state()
 	assert(left_draw_state["scale"].x > 0, "Left-facing bazooka must use its original readable orientation")
 	assert(absf(wrapf(left_draw_state["rotation"], -PI, PI)) <= PI * 0.5, "Left-facing bazooka must stay upright")
-	game.update_aim_target(game.player_pos + Vector2(130, 250))
+	_fire_at(game, game.player_pos + Vector2(130, 250))
 	game.player_vel.x = 220
 	for frame in 24:
 		game.update_visual_controller(1.0 / 60.0)
