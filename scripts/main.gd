@@ -144,10 +144,10 @@ var mask_polygon := PackedVector2Array()
 var mask_uvs := PackedVector2Array()
 var camera_shake := 0.0
 var screen_flash := 0.0
-var last_shot_direction := Vector2.DOWN
-var aim_direction := Vector2.DOWN
+var last_shot_direction := Vector2.RIGHT
+var aim_direction := Vector2.RIGHT
 var visual_body_rotation := 0.0
-var visual_weapon_rotation := PI * 0.5
+var visual_weapon_rotation := 0.0
 var weapon_pose_timer := 0.0
 var weapon_kick := 0.0
 var facing_left := false
@@ -348,16 +348,19 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func update_visual_controller(delta: float) -> void:
 	weapon_pose_timer = maxf(0.0, weapon_pose_timer - delta)
+	if weapon_pose_timer > 0.0 and last_shot_direction.x != 0.0:
+		facing_left = last_shot_direction.x < 0.0
+	elif absf(player_vel.x) > 12.0:
+		facing_left = player_vel.x < 0.0
+	var rest_angle := PI if facing_left else 0.0
 	if weapon_pose_timer > WEAPON_RETURN_TIME:
 		visual_weapon_rotation = last_shot_direction.angle()
 	elif weapon_pose_timer > 0.0:
 		var progress := smoothstep(0.0, WEAPON_RETURN_TIME, WEAPON_RETURN_TIME - weapon_pose_timer)
-		visual_weapon_rotation = lerp_angle(last_shot_direction.angle(), PI * 0.5, progress)
+		visual_weapon_rotation = lerp_angle(last_shot_direction.angle(), rest_angle, progress)
 	else:
-		visual_weapon_rotation = PI * 0.5
+		visual_weapon_rotation = rest_angle
 	aim_direction = Vector2.from_angle(visual_weapon_rotation)
-	if absf(player_vel.x) > 12.0:
-		facing_left = player_vel.x < 0.0
 	var desired_body_rotation := clampf(player_vel.x / STEERING_SPEED * deg_to_rad(20.0), -deg_to_rad(28.0), deg_to_rad(28.0))
 	var body_weight := 1.0 - exp(-7.0 * delta)
 	visual_body_rotation = lerp_angle(visual_body_rotation, desired_body_rotation, body_weight)
@@ -371,7 +374,8 @@ func get_weapon_pivot() -> Vector2:
 
 
 func get_weapon_draw_state() -> Dictionary:
-	var points_left := cos(visual_weapon_rotation) < 0.0
+	var horizontal := cos(visual_weapon_rotation)
+	var points_left := facing_left if absf(horizontal) < 0.001 else horizontal < 0.0
 	if points_left:
 		return {"rotation": visual_weapon_rotation - PI, "scale": Vector2.ONE, "points_left": true}
 	return {"rotation": visual_weapon_rotation, "scale": Vector2(-1.0, 1.0), "points_left": false}
@@ -379,9 +383,13 @@ func get_weapon_draw_state() -> Dictionary:
 
 func get_aim_solution(target: Vector2) -> Dictionary:
 	var pivot := get_weapon_pivot()
-	var direction := (target - pivot).normalized()
-	if direction.length_squared() < 0.5:
-		direction = Vector2.DOWN
+	var offset := target - pivot
+	# Four clear firing poses; the rocket handles finer homing after launch.
+	var direction := Vector2.DOWN
+	if absf(offset.x) > absf(offset.y):
+		direction = Vector2.LEFT if offset.x < 0.0 else Vector2.RIGHT
+	elif offset.y < 0.0:
+		direction = Vector2.UP
 	var muzzle := pivot + direction * 68.0
 	return {"pivot": pivot, "direction": direction, "muzzle": muzzle}
 
@@ -436,10 +444,10 @@ func start_game() -> void:
 	weapon_kick = 0.0
 	camera_shake = 0.0
 	screen_flash = 0.0
-	last_shot_direction = Vector2.DOWN
-	aim_direction = Vector2.DOWN
+	last_shot_direction = Vector2.RIGHT
+	aim_direction = Vector2.RIGHT
 	visual_body_rotation = 0.0
-	visual_weapon_rotation = PI * 0.5
+	visual_weapon_rotation = 0.0
 	weapon_pose_timer = 0.0
 	facing_left = false
 	weapon_anchor_x = 22.0
@@ -505,8 +513,12 @@ func launch_player(_tap_position: Vector2 = Vector2.ZERO) -> void:
 	# Freeze the launch direction; only the rocket follows the target afterward.
 	var target: Vector2 = ghost["pos"] if not ghost.is_empty() else get_weapon_pivot() + Vector2.DOWN * 260.0
 	var solution := get_aim_solution(target)
-	var muzzle_position: Vector2 = solution["muzzle"]
 	var shot_direction: Vector2 = solution["direction"]
+	if shot_direction.x != 0.0:
+		# Side shots turn the hero and weapon together, keeping the barrel horizontal.
+		facing_left = shot_direction.x < 0.0
+		weapon_anchor_x = -22.0 if facing_left else 22.0
+	var muzzle_position := get_weapon_pivot() + shot_direction * 68.0
 	last_shot_direction = shot_direction
 	aim_direction = shot_direction
 	visual_weapon_rotation = shot_direction.angle()

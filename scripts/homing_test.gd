@@ -47,7 +47,7 @@ func _run() -> void:
 			assert(game.rockets.size() == 1 and not game.tutorial_visible, "A short tap must fire once on release and dismiss the tutorial")
 			assert(game.rockets[0]["target"] == target, "The nearest visible ghost must be selected regardless of the tap position")
 			var direction: Vector2 = game.rockets[0]["vel"].normalized()
-			assert(direction.is_equal_approx((target["pos"] - game.get_weapon_pivot()).normalized()), "The rocket must launch toward the selected ghost, including above the hero")
+			assert(direction == Vector2.UP, "A ghost above must select the straight-up firing pose")
 			assert(absf(angle_difference(game.visual_weapon_rotation, direction.angle())) < 0.001, "The bazooka barrel must align with the launched rocket")
 			assert(game.rockets[0]["pos"].is_equal_approx(game.get_weapon_pivot() + direction * 68.0), "The rocket must emerge from the aimed muzzle")
 			game.update_rockets(game.ROCKET_LAUNCH_TIME * 0.5)
@@ -78,7 +78,7 @@ func _run() -> void:
 		game.update_ghost_attacks(0.01)
 		var attacker: Dictionary = game.ghosts[0]
 		_tap(game, Vector2(20, 40))
-		assert(game.rockets[0]["vel"].normalized().is_equal_approx((attacker["pos"] - game.get_weapon_pivot()).normalized()), "Tapping above the hero must still aim at the selected attacker below")
+		assert(game.rockets[0]["vel"].normalized() == Vector2.DOWN, "Tapping above the hero must still select the downward pose for an attacker below")
 		for frame in frames_per_second:
 			game.update_ghosts(1.0 / frames_per_second)
 			game.update_rockets(1.0 / frames_per_second)

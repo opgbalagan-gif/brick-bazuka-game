@@ -100,11 +100,11 @@ func _run() -> void:
 	assert(absf(down_solution["direction"].x) < 0.12 and game.player_vel == Vector2.ZERO, "Downward shots must preserve player velocity")
 	game.reload_timer = 0.0
 	game.player_vel = Vector2.ZERO
-	var left_target: Vector2 = game.player_pos + Vector2(-140, 240)
+	var left_target: Vector2 = game.player_pos + Vector2(-260, 0)
 	game.ghosts = [game.make_ghost(left_target, 0)]
-	assert(not game.facing_left, "Shooting left must not turn a stationary hero")
 	game.launch_player(left_target)
-	assert(game.player_vel == Vector2.ZERO, "Firing down-left must not move the hero")
+	assert(game.facing_left and game.weapon_anchor_x < 0.0, "A leftward shot must turn the hero and weapon together")
+	assert(game.player_vel == Vector2.ZERO, "Turning to fire left must not move the hero")
 
 	var smashed_before: int = game.smashed_total
 	game.damage_block(0, 99)
@@ -132,7 +132,7 @@ func _run() -> void:
 			game.update_visual_controller(1.0 / 60.0)
 		assert(absf(game.visual_body_rotation) <= deg_to_rad(50.1), "Body lean must remain controlled")
 		assert(is_finite(game.visual_weapon_rotation), "Weapon rotation must remain stable")
-	_fire_at(game, game.player_pos + Vector2(130, 250))
+	_fire_at(game, game.player_pos + Vector2(260, 80))
 	game.player_vel.x = 220
 	game.update_visual_controller(0.12)
 	assert(game.visual_body_rotation > 0, "Rightward movement must lean the body clockwise")
@@ -141,12 +141,11 @@ func _run() -> void:
 	var right_draw_state: Dictionary = game.get_weapon_draw_state()
 	assert(right_draw_state["scale"].x < 0, "Right-facing bazooka must use a horizontal mirror")
 	assert(absf(wrapf(right_draw_state["rotation"], -PI, PI)) <= PI * 0.5, "Right-facing bazooka must stay upright")
-	_fire_at(game, game.player_pos + Vector2(-130, 250))
-	var pivot_before_flip: Vector2 = game.get_weapon_pivot()
-	_fire_at(game, game.player_pos + Vector2(130, 250))
-	var pivot_before_smoothing: Vector2 = game.get_weapon_pivot()
-	assert(pivot_before_flip.distance_to(pivot_before_smoothing) < 0.01, "Flip must not teleport the weapon anchor")
-	_fire_at(game, game.player_pos + Vector2(-130, 250))
+	_fire_at(game, game.player_pos + Vector2(-260, 80))
+	assert(game.facing_left and game.weapon_anchor_x < 0.0, "A leftward shot must use the left-facing hand")
+	_fire_at(game, game.player_pos + Vector2(260, 80))
+	assert(not game.facing_left and game.weapon_anchor_x > 0.0, "A rightward shot must turn the hero and grip together")
+	_fire_at(game, game.player_pos + Vector2(-260, 80))
 	game.player_vel.x = -220
 	for frame in 12:
 		game.update_visual_controller(1.0 / 60.0)
@@ -155,7 +154,7 @@ func _run() -> void:
 	var left_draw_state: Dictionary = game.get_weapon_draw_state()
 	assert(left_draw_state["scale"].x > 0, "Left-facing bazooka must use its original readable orientation")
 	assert(absf(wrapf(left_draw_state["rotation"], -PI, PI)) <= PI * 0.5, "Left-facing bazooka must stay upright")
-	_fire_at(game, game.player_pos + Vector2(130, 250))
+	_fire_at(game, game.player_pos + Vector2(260, 80))
 	game.player_vel.x = 220
 	for frame in 24:
 		game.update_visual_controller(1.0 / 60.0)
