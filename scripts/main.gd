@@ -1390,26 +1390,12 @@ func draw_particles() -> void:
 		draw_rect(Rect2(particle["pos"] - Vector2(size, size) * 0.5, Vector2(size, size)), color)
 
 
-func draw_panel(rect: Rect2, fill: Color, border: Color, border_width: int = 3, radius: int = 8) -> void:
-	var box := StyleBoxFlat.new()
-	box.bg_color = fill
-	box.border_color = border
-	box.border_width_left = border_width
-	box.border_width_top = border_width
-	box.border_width_right = border_width
-	box.border_width_bottom = border_width
-	box.corner_radius_top_left = radius
-	box.corner_radius_top_right = radius
-	box.corner_radius_bottom_left = radius
-	box.corner_radius_bottom_right = radius
-	box.shadow_color = Color(0, 0, 0, 0.45)
-	box.shadow_size = 5
-	box.shadow_offset = Vector2(0, 4)
-	draw_style_box(box, rect)
+func draw_panel(rect: Rect2, fill: Color, _border: Color, _border_width: int = 3, _radius: int = 8) -> void:
+	ARCADE_UI.METAL.draw_at(self, rect, maxf(fill.r, fill.g) > 0.4, false, Color(1, 1, 1, fill.a))
 
 
 func draw_label(text: String, baseline: Vector2, size: int, color: Color, alignment: HorizontalAlignment, width: float, outline: int = 2) -> void:
-	var font := ThemeDB.fallback_font
+	var font := ARCADE_UI.FONT
 	if outline > 0:
 		var offsets := [Vector2(-outline, 0), Vector2(outline, 0), Vector2(0, -outline), Vector2(0, outline), Vector2(-outline, -outline), Vector2(outline, outline)]
 		for offset in offsets:

@@ -21,6 +21,8 @@ var busy := {"runs": false, "scores": false, "leaderboard": false}
 var requests: Dictionary = {}
 var reward_summary: Label
 var score_label: Label
+var title_art: TextureRect
+var score_art: Array[Control] = []
 var name_input: LineEdit
 var save_button: Button
 var status_label: Label
@@ -136,37 +138,45 @@ func _place(node: Control, rect: Rect2) -> void:
 
 func _build_ui() -> void:
 	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.83)
+	dim.color = Color(0, 0, 0, 0.88)
 	dim.size = Vector2(540, 960)
 	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(dim)
-	UI.panel(self, Rect2(16, 20, 508, 920))
-	UI.panel(self, Rect2(30, 34, 480, 58), true)
+	UI.panel(self, Rect2(16, 12, 508, 850)).outer = true
+	title_art = UI.image(self, UI.ART.texture("game_over"), Rect2(29, 27, 482, 86))
+	# Kept as a semantic title while the original lettering is drawn from the atlas.
 	title_label = _label("ИГРА ОКОНЧЕНА", 29)
-	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_place(title_label, Rect2(44, 42, 452, 42))
-	score_label = _label("0 ОЧКОВ", 42, UI.ORANGE)
-	score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_place(score_label, Rect2(38, 104, 464, 54))
-	reward_summary = _label("", 16, UI.LIME)
+	title_label.hide()
+	add_child(title_label)
+	score_label = _label("0", 66, Color("ffb600"))
+	score_label.add_theme_font_override("font", preload("res://assets/fonts/RussoOne-Regular.ttf"))
+	score_label.add_theme_constant_override("outline_size", 5)
+	score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	score_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_place(score_label, Rect2(99, 118, 164, 69))
+	score_art.append(UI.image(self, UI.ART.texture("points"), Rect2(267, 125, 171, 56)))
+	score_art.append(UI.image(self, UI.ART.texture("score_left"), Rect2(57, 126, 39, 61)))
+	score_art.append(UI.image(self, UI.ART.texture("score_right"), Rect2(449, 126, 36, 61)))
+	reward_summary = _label("", 14, UI.LIME)
 	reward_summary.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_place(reward_summary, Rect2(38, 166, 464, 24))
-	_place(_label("ТВОЁ ИМЯ", 17), Rect2(40, 201, 460, 26))
+	_place(reward_summary, Rect2(38, 184, 464, 18))
+	UI.image(self, UI.ART.texture("your_name"), Rect2(44, 203, 100, 19))
+	UI.panel(self, Rect2(38, 226, 323, 54))
 	name_input = LineEdit.new()
 	name_input.placeholder_text = "Введи имя"
 	name_input.max_length = 20
 	name_input.virtual_keyboard_enabled = web_name_input == null
-	name_input.add_theme_font_size_override("font_size", 22)
-	name_input.add_theme_color_override("font_color", WHITE)
-	name_input.add_theme_color_override("font_uneditable_color", WHITE)
-	name_input.add_theme_stylebox_override("normal", _box(Color("0c1012"), UI.ORANGE, 3))
-	name_input.add_theme_stylebox_override("read_only", _box(Color("0c1012"), UI.ORANGE, 3))
-	name_input.add_theme_stylebox_override("focus", _box(Color("0c1012"), LIME, 3))
+	name_input.add_theme_font_override("font", UI.FONT)
+	name_input.add_theme_font_size_override("font_size", 26)
+	name_input.add_theme_color_override("font_color", WHITE if web_name_input == null else Color.TRANSPARENT)
+	name_input.add_theme_color_override("font_uneditable_color", WHITE if web_name_input == null else Color.TRANSPARENT)
+	for state in ["normal", "read_only", "focus"]:
+		name_input.add_theme_stylebox_override(state, StyleBoxEmpty.new())
 	name_input.text_changed.connect(_name_changed)
 	name_input.text_submitted.connect(func(_text: String): commit_name())
-	_place(name_input, Rect2(38, 230, 304, 50))
-	edit_name_button = _button("ИЗМЕНИТЬ", true)
-	edit_name_button.add_theme_font_size_override("font_size", 15)
+	_place(name_input, Rect2(63, 232, 275, 42))
+	edit_name_button = UI.art_button("edit", "ИЗМЕНИТЬ")
+	edit_name_button.add_theme_font_size_override("font_size", 24)
 	edit_name_button.pressed.connect(func():
 		if editing_name:
 			commit_name()
@@ -174,50 +184,46 @@ func _build_ui() -> void:
 			editing_name = true
 			_sync_profile()
 			name_input.grab_focus())
-	_place(edit_name_button, Rect2(352, 230, 150, 50))
-	save_button = _button("СОХРАНИТЬ", true)
-	save_button.add_theme_font_size_override("font_size", 26)
+	_place(edit_name_button, Rect2(372, 226, 130, 54))
+	save_button = UI.art_button("save", "СОХРАНИТЬ")
+	save_button.add_theme_font_size_override("font_size", 28)
 	save_button.pressed.connect(save_score)
-	_place(save_button, Rect2(38, 292, 464, 58))
-	status_label = _label("", 14, Color("c5cbd1"))
+	_place(save_button, Rect2(38, 291, 464, 78))
+	status_label = _label("", 16, Color("c5cbd1"))
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_place(status_label, Rect2(40, 360, 460, 40))
-	UI.panel(self, Rect2(30, 414, 480, 280))
-	UI.panel(self, Rect2(38, 404, 320, 48), true)
-	var board_title := _label("ОБЩИЙ РЕЙТИНГ", 23)
-	board_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_place(board_title, Rect2(44, 412, 306, 32))
-	var refresh := _button("ОБНОВИТЬ", true)
-	refresh.add_theme_font_size_override("font_size", 14)
+	_place(status_label, Rect2(43, 375, 454, 34))
+	UI.image(self, UI.ART.texture("rating"), Rect2(32, 419, 333, 70))
+	var refresh := UI.art_button("refresh", "ОБНОВИТЬ")
 	refresh.pressed.connect(load_scores)
-	_place(refresh, Rect2(368, 404, 134, 48))
-	for spec in [["№", 48, 36], ["ИГРОК", 98, 276], ["ОЧКИ", 391, 103]]:
-		var column := _label(spec[0], 16, UI.ORANGE)
-		_place(column, Rect2(spec[1], 464, spec[2], 26))
+	_place(refresh, Rect2(378, 426, 126, 56))
+	UI.panel(self, Rect2(38, 498, 464, 232))
+	UI.image(self, UI.ART.texture("columns"), Rect2(60, 510, 418, 23))
+	var separator := ColorRect.new()
+	separator.color = Color("bfc5c7")
+	separator.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_place(separator, Rect2(50, 537, 440, 2))
 	var scroll := ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	_place(scroll, Rect2(44, 496, 452, 180))
+	_place(scroll, Rect2(50, 541, 440, 175))
 	rows_box = VBoxContainer.new()
 	rows_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	rows_box.add_theme_constant_override("separation", 0)
 	scroll.add_child(rows_box)
-	board_status = _label("", 12, Color("c5cbd1"))
+	board_status = _label("", 14, Color("c5cbd1"))
 	board_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	board_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_place(board_status, Rect2(38, 700, 464, 32))
-	UI.artist_banner(self, Rect2(30, 745, 480, 100))
-	restart_button = _button("ЕЩЁ РАЗ", true)
-	restart_button.add_theme_font_size_override("font_size", 23)
+	_place(board_status, Rect2(42, 737, 456, 28))
+	restart_button = UI.art_button("again", "ЕЩЁ РАЗ")
 	restart_button.pressed.connect(func(): dismiss(); restart_requested.emit())
-	_place(restart_button, Rect2(38, 864, 224, 54))
-	home_button = _button("МЕНЮ", true)
-	home_button.add_theme_font_size_override("font_size", 23)
+	_place(restart_button, Rect2(38, 773, 232, 81))
+	home_button = UI.art_button("menu", "МЕНЮ")
 	home_button.pressed.connect(func(): dismiss(); home_requested.emit())
-	_place(home_button, Rect2(278, 864, 224, 54))
-	close_button = _button("ВЕРНУТЬСЯ В ИГРУ", true)
+	_place(home_button, Rect2(284, 773, 220, 81))
+	close_button = UI.art_button("menu", "МЕНЮ")
 	close_button.pressed.connect(func(): dismiss(); browse_closed.emit())
-	_place(close_button, Rect2(38, 864, 464, 54))
+	_place(close_button, Rect2(156, 773, 228, 81))
+	UI.artist_banner(self, Rect2(16, 878, 508, 70))
 
 
 func set_rewards_summary(earned: int, balance: int, tickets: int) -> void:
@@ -244,7 +250,12 @@ func show_results(score: int) -> void:
 	browsing = false
 	run_score = score
 	title_label.text = "ИГРА ОКОНЧЕНА"
-	score_label.text = str(score) + " ОЧКОВ"
+	score_label.text = str(maxi(0, score))
+	var score_font := score_label.get_theme_font("font")
+	var score_size := 66
+	while score_font.get_string_size(score_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, score_size).x > 160 and score_size > 14:
+		score_size -= 1
+	score_label.add_theme_font_size_override("font_size", score_size)
 	status_label.text = "Имя запоминается на этом устройстве."
 	_open()
 
@@ -264,6 +275,9 @@ func _open() -> void:
 			player_name_changed.emit(last_name)
 	name_input.text = last_name
 	editing_name = not _valid_name(last_name)
+	title_art.texture = UI.ART.texture("rating" if browsing else "game_over")
+	for art in score_art:
+		art.visible = not browsing
 	score_label.visible = not browsing
 	reward_summary.visible = not browsing
 	save_button.visible = not browsing
@@ -287,6 +301,7 @@ func _open() -> void:
 func _sync_profile() -> void:
 	name_input.editable = editing_name
 	edit_name_button.text = "ГОТОВО" if editing_name else "ИЗМЕНИТЬ"
+	UI.sync_art_button(edit_name_button)
 	if web_name_input != null:
 		web_name_input.set_editable(editing_name)
 
@@ -337,6 +352,8 @@ func _sync_save_button() -> void:
 		save_button.text = "ОСТАЛСЯ НА УСТРОЙСТВЕ" if pending_score.has("error") else "ЖДЁТ ОТПРАВКИ"
 	else:
 		save_button.text = "СОХРАНИТЬ"
+
+	UI.sync_art_button(save_button)
 
 
 func _valid_name(value: String) -> bool:
@@ -531,16 +548,18 @@ func _draw_rows(rows: Array) -> void:
 		if not entry is Dictionary:
 			continue
 		var line := HBoxContainer.new()
-		line.custom_minimum_size.y = 36
-		var rank := _label(str(int(entry.get("rank", 0))), 22, LIME if int(entry.get("rank", 0)) == 1 else UI.ORANGE)
-		rank.custom_minimum_size.x = 38
+		line.custom_minimum_size.y = 35
+		line.draw.connect(func(): line.draw_line(Vector2(0, line.size.y - 1), Vector2(line.size.x, line.size.y - 1), Color("596266"), 1))
+		var rank := _label(str(int(entry.get("rank", 0))), 27, LIME if int(entry.get("rank", 0)) == 1 else UI.ORANGE)
+		rank.custom_minimum_size.x = 54
+		rank.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		line.add_child(rank)
-		var player := _label(str(entry.get("name", "")).left(20), 19)
+		var player := _label(str(entry.get("name", "")).left(20), 26)
 		player.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		player.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		line.add_child(player)
-		var score := _label(str(int(entry.get("score", 0))), 19)
-		score.custom_minimum_size.x = 100
+		var score := _label(str(int(entry.get("score", 0))), 26)
+		score.custom_minimum_size.x = 84
 		score.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		line.add_child(score)
 		rows_box.add_child(line)

@@ -1,6 +1,9 @@
 /* Real browser input: tapping it opens the iOS/Android keyboard directly. */
 (() => {
   'use strict';
+  const fontStyle = document.createElement('style');
+  fontStyle.textContent = "@font-face{font-family:BrickPixel;src:url('ui/Tiny5-Regular.ttf')}";
+  document.body.appendChild(fontStyle);
   const input = document.createElement('input');
   input.id = 'brick-player-name';
   input.type = 'text';
@@ -9,7 +12,7 @@
   input.autocomplete = 'nickname';
   input.enterKeyHint = 'done';
   input.setAttribute('aria-label', 'Твоё имя для рейтинга');
-  input.style.cssText = 'position:fixed;display:none;z-index:24;box-sizing:border-box;background:#0c1012;color:#fff7e9;border:2px solid #ff7a08;border-radius:10px;padding:0 12px;font-family:Arial,sans-serif;outline:none;touch-action:manipulation;user-select:text;-webkit-user-select:text;';
+  input.style.cssText = 'position:fixed;display:none;z-index:24;box-sizing:border-box;background:transparent;color:#fff7e9;border:0;border-radius:0;padding:0;font-family:BrickPixel,monospace;text-shadow:1px 1px #000;outline:none;touch-action:manipulation;user-select:text;-webkit-user-select:text;';
   document.body.appendChild(input);
   let visible = false, submit = false, rect = [0, 0, 0, 0];
   function place() {
@@ -22,7 +25,7 @@
     Object.assign(input.style, {
       left: `${left + rect[0] * scale}px`, top: `${top + rect[1] * scale}px`,
       width: `${rect[2] * scale}px`, height: `${rect[3] * scale}px`,
-      fontSize: `${Math.max(16, 22 * scale)}px`, display: 'block'
+      fontSize: `${Math.max(16, 26 * scale)}px`, display: 'block'
     });
   }
   // Do not cancel default input events: selection, IME and the keyboard need them.

@@ -96,3 +96,5 @@ node scripts/test_tilt.mjs
 ```
 
 The Web leaderboard uses `web/name-input.js` to place a real browser text field over the Godot form, enabling native phone keyboards, Cyrillic input and IME. It follows canvas resizing, stops gameplay key propagation, and disappears when leaving results. Export versioning installs this bridge alongside the tilt bridge. Native builds retain the focused Godot LineEdit.
+
+The results screen uses the supplied orange-metal reference directly: original title, save/refresh/replay/menu button art and table headings are selected from an unchanged atlas. Scores, names and ranking rows remain live controls. Menu, shop and banner panels share its real border/mesh fragments and pixel typography.

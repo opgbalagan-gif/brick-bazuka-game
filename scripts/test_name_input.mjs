@@ -50,7 +50,7 @@ assert.equal(input.style.left, '324px', 'Input must follow the letterboxed game,
 bounds = {left: 0, top: 0, width: 360, height: 640};
 window.visualViewport.fire('resize');
 assert.equal(input.style.left, '36px');
-assert.equal(input.style.fontSize, '16px', 'Phone text must avoid automatic focus zoom');
+assert(parseFloat(input.style.fontSize) >= 16, 'Phone text must avoid automatic focus zoom');
 bridge.close();
 assert.equal(input.style.display, 'none');
 assert.equal(document.activeElement, null);

@@ -52,3 +52,7 @@ for image_name in ["artist.png", "logo.png"]:
     shutil.copyfile(root / "assets" / "release-september" / image_name, ui_dir / image_name)
 shutil.copyfile(root / "assets" / "fonts" / "RussoOne-Regular.ttf", ui_dir / "RussoOne-Regular.ttf")
 shutil.copyfile(root / "assets" / "fonts" / "OFL-RussoOne.txt", ui_dir / "OFL-RussoOne.txt")
+
+for font_name in ["Tiny5-Regular.ttf", "OFL-Tiny5.txt"]:
+    shutil.copyfile(root / "assets" / "fonts" / font_name, ui_dir / font_name)
+shutil.copyfile(root / "assets" / "release-september" / "results-reference.png", ui_dir / "results-reference.png")
