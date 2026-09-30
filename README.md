@@ -16,17 +16,16 @@ godot --path .
 
 ## Controls
 
-- Phones start with finger controls and no sensor permission prompt. Hold the left or right half for 0.18 seconds to steer, or drag horizontally to steer immediately. Drag distance controls speed; sliding back across the starting point reverses direction. Release to brake. The corner arrow buttons also move the hero.
+- Phones start with finger controls and no sensor permission prompt. Hold the left or right half for 0.18 seconds to steer, or drag horizontally to steer immediately. Drag distance controls speed; sliding back across the starting point reverses direction. Release to brake.
 - A short tap fires once on release at the nearest visible ghost. Holds and swipes do not shoot. A second finger can tap to shoot while the first keeps steering. Canceled touches, focus loss, pause, results and restart clear gesture state.
-- The **НАКЛОН** button switches to optional phone tilt. On iPhone, then tap **ВКЛЮЧИТЬ НАКЛОН** and allow motion/orientation access. **ПАЛЕЦ** switches back. Each run calibrates the initial phone position as neutral; a 3-degree dead zone filters hand tremors. Rotation and returning from a hidden tab recalibrate the sensor. Sensor access requires HTTPS (or localhost); finger controls work without sensor support or permission.
-- On desktop, use **←/→** or physical **A/D** (**Ф/В** on a Russian layout) to move. The first movement key dismisses the introductory overlay and starts play. Keyboard hints appear on the title screen and before the first move; platform jumps remain automatic. Taps and clicks fire independently of movement.
-- The published Web game introduces phone controls in the menu and first-play hint on every device. Mouse movement and holds do not steer the hero; a desktop preview can still use the keyboard and click to fire.
+- The gameplay HUD shows only the score and life masks. Skin and rating buttons stay in the menu; arrow and tilt-switch buttons are hidden. Coins and promo tickets remain saved and visible in the shop/results; collectible pickup animations still play.
+- On desktop, use **←/→** or physical **A/D** (**Ф/В** on a Russian layout) to move. Keyboard hints appear on the native title screen; platform jumps remain automatic. Taps and clicks fire independently of movement.
+- The published Web game explains finger controls in the menu on every device. Mouse movement and holds do not steer the hero; a desktop preview can still use the keyboard and click to fire.
 - The hero faces horizontal travel and keeps the last facing during vertical flight. Horizontal shots turn the whole hero and bazooka left or right for the firing animation without changing movement. Up/down shots rotate only the bazooka, then return it to its horizontal position. Lean follows movement; the weapon stays behind the hero so it cannot cover the face.
 - The bazooka rests horizontally at the hero's hand, facing the same way as the hero. Each shot selects one of four poses (up, down, left or right), using the dominant axis toward the nearest visible ghost. It holds that launch angle for 0.20 seconds, then smoothly returns to the horizontal rest pose over 0.24 seconds. It does not follow the rocket or a moving target afterward. Pause freezes the pose and restart restores the horizontal position. Rockets leave the aimed muzzle, clear the barrel for 0.08 seconds, then track the selected ghost as it moves. If it disappears, they seek another visible ghost; with no ghosts, a shot continues straight down. Shooting does not change the hero's position, velocity or trajectory in any direction.
 - Enter or Space: start from the title screen; during play, fire a homing rocket. Either key also resumes a paused run without firing.
 - Escape: pause.
-- The title screen has one active control: START. Its painted button launches the game.
-- On phones, the introductory glove and short hint explain holding, swiping and tapping. The first touch or arrow-button movement dismisses the hint and starts play.
+- START launches the run immediately, without an introductory overlay covering the playfield. The menu also provides access to skins and the rating.
 
 ## Gameplay systems
 

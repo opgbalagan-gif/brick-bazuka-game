@@ -53,6 +53,9 @@ const android = browser();
 android.input.start();
 assert.equal(android.input.needs_permission(), false);
 assert.equal(android.input.get_status(), 'buttons', 'Phones must start in touch mode without a sensor prompt');
+for (const id of ['brick-tilt-left', 'brick-tilt-right', 'brick-control-mode']) {
+  assert.equal(android.elements.get(id).style.display, 'none', 'Gameplay must not show control buttons');
+}
 android.sample(0); android.sample(22);
 assert.equal(android.input.read_axis(), 0, 'Touch mode must ignore sensor movement');
 android.toggle();
@@ -106,7 +109,7 @@ assert.equal(denied.input.get_status(), 'denied');
 denied.skip();
 assert.equal(denied.input.needs_permission(), false);
 const left = denied.elements.get('brick-tilt-left');
-assert.equal(left.style.display, 'block');
+assert.equal(left.style.display, 'none', 'Fallback input must keep the playfield clear');
 left.fire('pointerdown'); assert.equal(denied.input.read_axis(), -1);
 left.fire('pointercancel'); assert.equal(denied.input.read_axis(), 0, 'Cancelled touches release steering');
 denied.input.stop(); assert.equal(left.style.display, 'none');

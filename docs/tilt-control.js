@@ -78,10 +78,9 @@
     message.textContent = messages[status] || messages.permission;
     enable.disabled = status === 'requesting';
     enable.style.display = ['unavailable', 'insecure'].includes(status) ? 'none' : 'block';
-    arrows.forEach(button => {
-      button.style.display = active && mobile && !panelOpen && status !== 'active' ? 'block' : 'none';
-    });
-    mode.style.display = active && mobile && !panelOpen ? 'block' : 'none';
+    // The playfield only shows score and lives. Godot handles finger gestures.
+    arrows.forEach(button => { button.style.display = 'none'; });
+    mode.style.display = 'none';
     mode.textContent = buttonsOnly ? 'НАКЛОН' : 'ПАЛЕЦ';
     mode.setAttribute('aria-label', buttonsOnly ? 'Переключить на управление наклоном' : 'Переключить на управление пальцем');
   }

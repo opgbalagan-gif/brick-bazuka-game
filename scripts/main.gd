@@ -493,7 +493,8 @@ func start_game() -> void:
 	for i in INITIAL_BLOCK_ROWS:
 		spawn_block(spawn_cursor_y)
 		spawn_cursor_y -= rng.randf_range(BLOCK_GAP_MIN, BLOCK_GAP_MAX)
-	tutorial_visible = true
+	# Controls are explained in the menu; start with an unobstructed playfield.
+	tutorial_visible = false
 	tutorial_time = 0.0
 	if is_instance_valid(background_video):
 		background_video.stop()
@@ -1147,10 +1148,10 @@ func _exit_tree() -> void:
 
 func _draw() -> void:
 	if is_instance_valid(leaderboard_button):
-		leaderboard_button.visible = not leaderboard.visible and not skin_shop.visible and screen != Screen.GAME_OVER
+		leaderboard_button.visible = screen == Screen.MENU and not leaderboard.visible and not skin_shop.visible
 		leaderboard_button.position = Vector2(16, 18) if screen == Screen.MENU else Vector2(370, 161)
 	if is_instance_valid(shop_button):
-		shop_button.visible = not leaderboard.visible and not skin_shop.visible and screen != Screen.GAME_OVER
+		shop_button.visible = screen == Screen.MENU and not leaderboard.visible and not skin_shop.visible
 		shop_button.position = Vector2(404, 18) if screen == Screen.MENU else Vector2(16, 161)
 	if is_instance_valid(platform_layer):
 		platform_layer.visible = screen != Screen.MENU
@@ -1177,10 +1178,11 @@ func draw_menu() -> void:
 	if tilt_control.uses_keyboard():
 		draw_keyboard_help(852.0, true)
 	else:
-		draw_panel(Rect2(40, 852, 460, 88), Color(0.02, 0.07, 0.12, 0.94), CYAN, 2, 10)
-		draw_label("УДЕРЖИВАЙ ПАЛЕЦ ИЛИ ВЕДИ В СТОРОНУ", Vector2(40, 880), 17, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 460, 1)
-		draw_label("КОРОТКИЙ ТАП — ВЫСТРЕЛ", Vector2(40, 905), 17, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 460, 1)
-		draw_label("ПРЫЖКИ И ПРИЦЕЛИВАНИЕ — АВТОМАТИЧЕСКИ", Vector2(40, 927), 13, PALE_CYAN, HORIZONTAL_ALIGNMENT_CENTER, 460, 1)
+		draw_panel(Rect2(40, 828, 460, 112), Color(0.02, 0.07, 0.12, 0.94), CYAN, 2, 10)
+		draw_label("ДЕРЖИ ПАЛЕЦ СЛЕВА — ДВИГАЙСЯ ВЛЕВО", Vector2(40, 853), 15, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 460, 1)
+		draw_label("ДЕРЖИ СПРАВА — ДВИГАЙСЯ ВПРАВО", Vector2(40, 877), 15, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 460, 1)
+		draw_label("КОРОТКОЕ КАСАНИЕ — ВЫСТРЕЛ", Vector2(40, 901), 17, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 460, 1)
+		draw_label("ПРЫЖКИ И ПРИЦЕЛ — АВТОМАТИЧЕСКИ", Vector2(40, 925), 13, PALE_CYAN, HORIZONTAL_ALIGNMENT_CENTER, 460, 1)
 
 
 func fit_texture(texture: Texture2D, bounds: Rect2) -> Rect2:
@@ -1324,14 +1326,6 @@ func draw_player() -> void:
 
 func draw_game_hud() -> void:
 	draw_score_counter()
-	draw_texture_rect(CASE_TEX, Rect2(19, 113, 33, 26), false)
-	draw_label(str(rewards.coins), Vector2(59, 136), 21, GOLD, HORIZONTAL_ALIGNMENT_LEFT, 145, 2)
-	if rewards.promo_tickets > 0:
-		draw_label("-5% × " + str(rewards.promo_tickets), Vector2(375, 136), 18, LIME, HORIZONTAL_ALIGNMENT_RIGHT, 145, 2)
-	if jet_timer > 0.0:
-		draw_texture_rect(BOOTS_TEX, Rect2(204, 125, 30, 30), false)
-		draw_rect(Rect2(244, 133, 92, 14), INK)
-		draw_rect(Rect2(247, 136, 86 * jet_timer / JET_DURATION, 8), GOLD)
 	for index in MAX_HEALTH:
 		var center := Vector2(VIEW_SIZE.x * 0.5 + (index - (MAX_HEALTH - 1) * 0.5) * 46, VIEW_SIZE.y - 43)
 		draw_set_transform(center)

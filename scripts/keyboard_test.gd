@@ -24,7 +24,7 @@ func _run() -> void:
 	assert(game.tilt_control.uses_keyboard(), "Desktop builds must show keyboard instructions")
 	_key(KEY_ENTER, true)
 	_key(KEY_ENTER, false)
-	assert(game.screen == game.Screen.GAME and game.tutorial_visible, "Enter must start the game from the title")
+	assert(game.screen == game.Screen.GAME and not game.tutorial_visible, "Enter must start immediately without an in-game tutorial overlay")
 	game.blocks.clear()
 	game.ghosts.clear()
 	game.spawn_cursor_y = -100000.0
