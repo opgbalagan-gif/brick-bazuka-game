@@ -49,8 +49,11 @@ godot --path .
 - The supplied night-city video loops behind the level at 540×960, 24 FPS. Pausing freezes the video and ghost animations; returning to START stops the video.
 - The HUD shows the run's numeric height score at the top, using white bubble-letter digits with a black outline. Three masks sampled from the hero's face show lives at the bottom: white masks are remaining lives and dim masks are spent lives. Transient messages appear above them.
 - Landing on a platform produces a jump sized for the maximum 310-pixel platform gap plus 60 pixels of clearance. Firing cannot boost or redirect it.
-- Movement and weapon strength are fixed. The game has no currency, collectible money, paid upgrades or cash rewards.
-- Best height, destroyed-platform count and settings save to `user://brick_bazuka_save.cfg`. Old currency and upgrade fields are ignored on load and removed on the next save.
+- Movement and weapon strength are fixed. Cash cases award 100 in-game coins, saved immediately on this device. A case appears every 5–9 generated rows, postponing pickup placement on spring/jet rows. Coins only buy cosmetic skins: the supplied orange Prisoner №13 costs 1,200 coins, is purchased once, and can be equipped freely afterward. The classic skin stays free. The unknown silhouette is a non-purchasable preview of a future skin. Coins are not real money, and skins do not change movement, shooting or collision rules.
+- A much rarer SNWEED safe appears after 65–110 generated rows, also avoiding spring/jet pickups and fake platforms. Collecting it launches an animated −5% SNWEED promo ticket and saves the ticket count. As requested, this is a promotion preview only: no active discount code, redemption or checkout discount is issued yet. Ticket counts do not increase the advertised discount percentage.
+- The new SKINS button opens the cosmetic store from the menu or pauses the current run. Closing it restores the previous pause state. Coin balances, ownership, selected skin and promo tickets use their own `rewards` save section; unrelated legacy upgrade/currency fields stay ignored.
+- The menu uses the supplied logo and START/РЕЙТИНГ artwork. The orange metal results screen follows the supplied reference and shows earned coins, the leaderboard, replay/menu controls, and an artist banner with separate Yandex Music and SNWEED website links. The standalone leaderboard uses the same palette and banner. The existing score submission and offline retry logic remains intact.
+- Best height, destroyed-platform count, cosmetics, coins, promo tickets and settings save to `user://brick_bazuka_save.cfg`. Old currency and upgrade fields are ignored on load and removed on the next save.
 - The РЕЙТИНГ button opens the board from the menu or pauses the current game. Closing it resumes that same run. A lightweight standalone `leaderboard.html` is also published beside the game. A valid name is saved on the device immediately, independently of network access, and becomes read-only beside ИЗМЕНИТЬ. The Web game and standalone page share the name through localStorage; separate devices/browsers set their own names.
 - Ratings preserve the last real downloaded table and label its update time during outages, with a dated public snapshot included in each release. Failed requests retry automatically with backoff. Score submissions persist on the device across restarts and retry the same signed run until confirmed, avoiding duplicate rows. Server-rejected or expired submissions remain local and are marked accordingly; offline scores are never presented as confirmed public results. Scores use a separate private Google Sheet on the existing SOLLERS Apps Script service. Setup and API: [server/google-sheets/README.md](server/google-sheets/README.md).
 
@@ -83,6 +86,7 @@ godot --headless --path . --script res://scripts/smoke_test.gd
 godot --headless --path . --script res://scripts/keyboard_test.gd
 godot --headless --path . --script res://scripts/homing_test.gd
 godot --headless --path . --script res://scripts/weapon_pose_test.gd
+godot --headless --path . --script res://scripts/rewards_test.gd
 godot --headless --path . --script res://scripts/fake_platform_test.gd
 godot --headless --path . --script res://scripts/gameplay_fixes_test.gd
 godot --headless --path . --script res://scripts/touch_control_test.gd

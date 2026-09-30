@@ -15,6 +15,7 @@ func platform(position: Vector2, fake: bool = false) -> Dictionary:
 	return {"pos": position, "size": Vector2(140, 48), "skin": 5, "kind": 1, "hp": 2, "max_hp": 2, "fake": fake, "spring": false, "boots": false}
 
 func run() -> void:
+	DirAccess.remove_absolute("user://gameplay_fixes_test.cfg")
 	var game = load("res://scenes/main.tscn").instantiate()
 	game.profile_path = "user://gameplay_fixes_test.cfg"
 	root.add_child(game)
@@ -29,6 +30,7 @@ func run() -> void:
 	await test_name_input(game)
 	print("GAMEPLAY_FIXES_TEST_OK nearest_respawn sturdy_start movement_facing slower_attacks wider_view jet_boots masks name_input")
 	game.free()
+	DirAccess.remove_absolute("user://gameplay_fixes_test.cfg")
 	quit()
 
 func test_respawn(game) -> void:

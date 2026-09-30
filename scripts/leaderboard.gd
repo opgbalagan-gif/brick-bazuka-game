@@ -7,7 +7,8 @@ signal browse_closed
 
 const API_URL := "https://script.google.com/macros/s/AKfycbyCcXRUgh1DKEUjoNRJrtdAyuY8hMfE7y5l4k2Yqb7qTexvAc6HnRq5h-RP9B9UQWomMw/exec"
 const WHITE := Color("f5f8ee")
-const LIME := Color("80df41")
+const LIME := Color("b7f30c")
+const UI := preload("res://scripts/arcade_ui.gd")
 
 var api_url := API_URL
 var last_name := ""
@@ -18,6 +19,7 @@ var submitted := false
 var pending_score: Dictionary = {}
 var busy := {"runs": false, "scores": false, "leaderboard": false}
 var requests: Dictionary = {}
+var reward_summary: Label
 var score_label: Label
 var name_input: LineEdit
 var save_button: Button
@@ -115,7 +117,7 @@ func _box(fill: Color, border: Color, width: int = 2) -> StyleBoxFlat:
 
 
 func _label(text_value: String, font_size: int = 20, color: Color = WHITE) -> Label:
-	var label := Label.new()
+	var label := UI.label(text_value, font_size, color)
 	label.text = text_value
 	label.add_theme_font_size_override("font_size", font_size)
 	label.add_theme_color_override("font_color", color)
@@ -123,61 +125,48 @@ func _label(text_value: String, font_size: int = 20, color: Color = WHITE) -> La
 
 
 func _button(text_value: String, primary: bool = false) -> Button:
-	var button := Button.new()
-	button.text = text_value
-	button.custom_minimum_size.y = 48
-	button.add_theme_font_size_override("font_size", 17)
-	button.add_theme_color_override("font_color", WHITE)
-	button.add_theme_stylebox_override("normal", _box(Color("287f29") if primary else Color("12334b"), LIME if primary else Color("355c70")))
-	button.add_theme_stylebox_override("hover", _box(Color("366b36"), LIME))
-	button.add_theme_stylebox_override("pressed", _box(Color("1b4e28"), LIME))
-	button.add_theme_stylebox_override("disabled", _box(Color("1b303e"), Color("354751")))
-	return button
+	return UI.button(text_value, primary)
+
+
+func _place(node: Control, rect: Rect2) -> void:
+	node.position = rect.position
+	node.size = rect.size
+	add_child(node)
 
 
 func _build_ui() -> void:
 	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.76)
+	dim.color = Color(0, 0, 0, 0.83)
 	dim.size = Vector2(540, 960)
 	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(dim)
-	var panel := Panel.new()
-	panel.position = Vector2(20, 24)
-	panel.size = Vector2(500, 912)
-	panel.add_theme_stylebox_override("panel", _box(Color("071f38"), LIME, 3))
-	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(panel)
-	var content := VBoxContainer.new()
-	content.position = Vector2(38, 40)
-	content.size = Vector2(464, 880)
-	content.add_theme_constant_override("separation", 8)
-	add_child(content)
-	title_label = _label("ЗАБЕГ ЗАВЕРШЁН", 25, Color("ff8a36"))
+	UI.panel(self, Rect2(16, 20, 508, 920))
+	UI.panel(self, Rect2(30, 34, 480, 58), true)
+	title_label = _label("ИГРА ОКОНЧЕНА", 29)
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	content.add_child(title_label)
-	score_label = _label("0 ОЧКОВ", 32)
+	_place(title_label, Rect2(44, 42, 452, 42))
+	score_label = _label("0 ОЧКОВ", 42, UI.ORANGE)
 	score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	content.add_child(score_label)
-	content.add_child(_label("ТВОЁ ИМЯ", 13, Color("aec0cb")))
-	var form := HBoxContainer.new()
-	form.add_theme_constant_override("separation", 8)
-	content.add_child(form)
+	_place(score_label, Rect2(38, 104, 464, 54))
+	reward_summary = _label("", 16, UI.LIME)
+	reward_summary.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_place(reward_summary, Rect2(38, 166, 464, 24))
+	_place(_label("ТВОЁ ИМЯ", 17), Rect2(40, 201, 460, 26))
 	name_input = LineEdit.new()
 	name_input.placeholder_text = "Введи имя"
 	name_input.max_length = 20
-	name_input.custom_minimum_size = Vector2(245, 48)
-	name_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_input.virtual_keyboard_enabled = web_name_input == null
 	name_input.add_theme_font_size_override("font_size", 22)
 	name_input.add_theme_color_override("font_color", WHITE)
 	name_input.add_theme_color_override("font_uneditable_color", WHITE)
-	name_input.add_theme_stylebox_override("normal", _box(Color("061420"), Color("557181")))
-	name_input.add_theme_stylebox_override("focus", _box(Color("061420"), LIME))
+	name_input.add_theme_stylebox_override("normal", _box(Color("0c1012"), UI.ORANGE, 3))
+	name_input.add_theme_stylebox_override("read_only", _box(Color("0c1012"), UI.ORANGE, 3))
+	name_input.add_theme_stylebox_override("focus", _box(Color("0c1012"), LIME, 3))
 	name_input.text_changed.connect(_name_changed)
 	name_input.text_submitted.connect(func(_text: String): commit_name())
-	form.add_child(name_input)
-	edit_name_button = _button("ИЗМЕНИТЬ")
-	edit_name_button.custom_minimum_size.x = 132
+	_place(name_input, Rect2(38, 230, 304, 50))
+	edit_name_button = _button("ИЗМЕНИТЬ", true)
+	edit_name_button.add_theme_font_size_override("font_size", 15)
 	edit_name_button.pressed.connect(func():
 		if editing_name:
 			commit_name()
@@ -185,55 +174,56 @@ func _build_ui() -> void:
 			editing_name = true
 			_sync_profile()
 			name_input.grab_focus())
-	form.add_child(edit_name_button)
+	_place(edit_name_button, Rect2(352, 230, 150, 50))
 	save_button = _button("СОХРАНИТЬ", true)
+	save_button.add_theme_font_size_override("font_size", 26)
 	save_button.pressed.connect(save_score)
-	content.add_child(save_button)
-	status_label = _label("", 14, Color("aec0cb"))
-	status_label.custom_minimum_size.y = 38
+	_place(save_button, Rect2(38, 292, 464, 58))
+	status_label = _label("", 14, Color("c5cbd1"))
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	content.add_child(status_label)
-	var heading := HBoxContainer.new()
-	var board_title := _label("ОБЩИЙ РЕЙТИНГ", 22)
-	board_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	heading.add_child(board_title)
-	var refresh := _button("ОБНОВИТЬ")
-	refresh.add_theme_font_size_override("font_size", 12)
-	refresh.custom_minimum_size = Vector2(100, 32)
+	_place(status_label, Rect2(40, 360, 460, 40))
+	UI.panel(self, Rect2(30, 414, 480, 280))
+	UI.panel(self, Rect2(38, 404, 320, 48), true)
+	var board_title := _label("ОБЩИЙ РЕЙТИНГ", 23)
+	board_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_place(board_title, Rect2(44, 412, 306, 32))
+	var refresh := _button("ОБНОВИТЬ", true)
+	refresh.add_theme_font_size_override("font_size", 14)
 	refresh.pressed.connect(load_scores)
-	heading.add_child(refresh)
-	content.add_child(heading)
-	var columns := HBoxContainer.new()
-	for spec in [["№", 38], ["ИГРОК", 284], ["ОЧКИ", 100]]:
-		var column := _label(spec[0], 12, Color("829dac"))
-		column.custom_minimum_size.x = spec[1]
-		columns.add_child(column)
-	content.add_child(columns)
+	_place(refresh, Rect2(368, 404, 134, 48))
+	for spec in [["№", 48, 36], ["ИГРОК", 98, 276], ["ОЧКИ", 391, 103]]:
+		var column := _label(spec[0], 16, UI.ORANGE)
+		_place(column, Rect2(spec[1], 464, spec[2], 26))
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_place(scroll, Rect2(44, 496, 452, 180))
 	rows_box = VBoxContainer.new()
-	rows_box.custom_minimum_size.y = 307
-	rows_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	rows_box.add_theme_constant_override("separation", 3)
-	content.add_child(rows_box)
-	board_status = _label("", 12, Color("aec0cb"))
-	board_status.custom_minimum_size.y = 28
+	rows_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rows_box.add_theme_constant_override("separation", 0)
+	scroll.add_child(rows_box)
+	board_status = _label("", 12, Color("c5cbd1"))
 	board_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	content.add_child(board_status)
-	var navigation := HBoxContainer.new()
-	navigation.add_theme_constant_override("separation", 10)
+	board_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_place(board_status, Rect2(38, 700, 464, 32))
+	UI.artist_banner(self, Rect2(30, 745, 480, 100))
 	restart_button = _button("ЕЩЁ РАЗ", true)
-	restart_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	restart_button.add_theme_font_size_override("font_size", 23)
 	restart_button.pressed.connect(func(): dismiss(); restart_requested.emit())
-	navigation.add_child(restart_button)
-	home_button = _button("МЕНЮ")
-	home_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_place(restart_button, Rect2(38, 864, 224, 54))
+	home_button = _button("МЕНЮ", true)
+	home_button.add_theme_font_size_override("font_size", 23)
 	home_button.pressed.connect(func(): dismiss(); home_requested.emit())
-	navigation.add_child(home_button)
+	_place(home_button, Rect2(278, 864, 224, 54))
 	close_button = _button("ВЕРНУТЬСЯ В ИГРУ", true)
-	close_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	close_button.pressed.connect(func(): dismiss(); browse_closed.emit())
-	navigation.add_child(close_button)
-	content.add_child(navigation)
+	_place(close_button, Rect2(38, 864, 464, 54))
+
+
+func set_rewards_summary(earned: int, balance: int, tickets: int) -> void:
+	reward_summary.text = "+" + str(earned) + " МОНЕТ ЗА ЗАБЕГ  •  ВСЕГО " + str(balance)
+	if tickets > 0:
+		reward_summary.text += "  •  БИЛЕТ -5%"
 
 
 func start_run() -> void:
@@ -253,7 +243,7 @@ func start_run() -> void:
 func show_results(score: int) -> void:
 	browsing = false
 	run_score = score
-	title_label.text = "ЗАБЕГ ЗАВЕРШЁН"
+	title_label.text = "ИГРА ОКОНЧЕНА"
 	score_label.text = str(score) + " ОЧКОВ"
 	status_label.text = "Имя запоминается на этом устройстве."
 	_open()
@@ -275,6 +265,7 @@ func _open() -> void:
 	name_input.text = last_name
 	editing_name = not _valid_name(last_name)
 	score_label.visible = not browsing
+	reward_summary.visible = not browsing
 	save_button.visible = not browsing
 	restart_button.visible = not browsing
 	home_button.visible = not browsing
@@ -540,8 +531,8 @@ func _draw_rows(rows: Array) -> void:
 		if not entry is Dictionary:
 			continue
 		var line := HBoxContainer.new()
-		line.custom_minimum_size.y = 28
-		var rank := _label(str(int(entry.get("rank", 0))), 18, LIME)
+		line.custom_minimum_size.y = 36
+		var rank := _label(str(int(entry.get("rank", 0))), 22, LIME if int(entry.get("rank", 0)) == 1 else UI.ORANGE)
 		rank.custom_minimum_size.x = 38
 		line.add_child(rank)
 		var player := _label(str(entry.get("name", "")).left(20), 19)

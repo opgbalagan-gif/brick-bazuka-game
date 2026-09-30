@@ -3,6 +3,7 @@
 import hashlib
 import json
 import re
+import shutil
 from pathlib import Path
 
 
@@ -45,3 +46,9 @@ board_html = board_html.replace('src="leaderboard.js"', f'src="leaderboard.js?v=
 board_html = board_html.replace('href="./"', f'href="./?v={version}"')
 (root / "docs" / "leaderboard.html").write_text(board_html, encoding="utf-8")
 (root / "docs" / "leaderboard-snapshot.json").write_bytes((root / "assets" / "data" / "leaderboard_snapshot.json").read_bytes())
+ui_dir = root / "docs" / "ui"
+ui_dir.mkdir(exist_ok=True)
+for image_name in ["artist.png", "logo.png"]:
+    shutil.copyfile(root / "assets" / "release-september" / image_name, ui_dir / image_name)
+shutil.copyfile(root / "assets" / "fonts" / "RussoOne-Regular.ttf", ui_dir / "RussoOne-Regular.ttf")
+shutil.copyfile(root / "assets" / "fonts" / "OFL-RussoOne.txt", ui_dir / "OFL-RussoOne.txt")

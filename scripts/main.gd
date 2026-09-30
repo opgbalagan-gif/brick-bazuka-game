@@ -49,10 +49,19 @@ const TAP_GLOVE_TEX := preload("res://assets/ui/tap_glove_down.png")
 const LEADERBOARD_UI := preload("res://scripts/leaderboard.gd")
 const TILT_CONTROL := preload("res://scripts/tilt_control.gd")
 const TOUCH_CONTROL := preload("res://scripts/touch_control.gd")
+const REWARDS := preload("res://scripts/rewards.gd")
+const SKIN_SHOP := preload("res://scripts/skin_shop.gd")
+const ARCADE_UI := preload("res://scripts/arcade_ui.gd")
+const CASE_TEX := preload("res://assets/release-september/cash-case.tres")
+const SAFE_TEX := preload("res://assets/release-september/promo-safe.tres")
+const PRISONER_TEX := preload("res://assets/release-september/prisoner-body.tres")
+const NEW_LOGO := preload("res://assets/release-september/logo.tres")
+const START_BUTTON_TEX := preload("res://assets/release-september/start-button.tres")
+const RATING_BUTTON_TEX := preload("res://assets/release-september/rating-button.tres")
 const BAZOOKA_BODY_TEX := preload("res://assets/weapons/bazooka_body.png")
 const ROCKET_TEX := preload("res://assets/weapons/rocket.svg")
 const SPRING_TEX := preload("res://assets/powerups/spring.svg")
-const BOOTS_TEX := preload("res://assets/ui/boots_icon.svg")
+const BOOTS_TEX := preload("res://assets/release-september/jet-boots.tres")
 const MASK_OUTLINE := [Vector2(624, 92), Vector2(674, 113), Vector2(710, 169), Vector2(737, 237), Vector2(728, 304), Vector2(693, 380), Vector2(674, 425), Vector2(633, 441), Vector2(603, 415), Vector2(579, 371), Vector2(557, 321), Vector2(539, 281), Vector2(543, 213), Vector2(557, 166), Vector2(586, 119)]
 
 # Clip the baked-in boot exhaust at the soles without changing the supplied sprite.
@@ -163,11 +172,19 @@ var platform_layer: Node2D
 var background_layer: Control
 var background_video: VideoStreamPlayer
 
-var cta_rect := Rect2(151, 754, 238, 90)
+var cta_rect := Rect2(94, 650, 352, 114)
 var touch_control: Node
-var leaderboard_button: Button
+var leaderboard_button: BaseButton
 var board_was_paused := false
 var ambient_rows_until_ghost := 1
+var rewards := REWARDS.new()
+var skin_shop
+var shop_button: Button
+var shop_was_paused := false
+var case_rows := 5
+var safe_rows := 80
+var run_coins := 0
+var reward_flights: Array = []
 
 
 func _ready() -> void:
@@ -195,11 +212,21 @@ func _ready() -> void:
 	leaderboard.player_name_changed.connect(func(value: String): player_name = value; save_profile())
 	leaderboard.browse_closed.connect(close_leaderboard)
 	add_child(leaderboard)
-	leaderboard_button = leaderboard._button("РЕЙТИНГ")
-	leaderboard_button.size = Vector2(136, 42)
+	leaderboard_button = ARCADE_UI.texture_button(RATING_BUTTON_TEX, "Рейтинг игроков")
+	leaderboard_button.size = Vector2(154, 48)
 	leaderboard_button.z_index = 15
 	leaderboard_button.pressed.connect(open_leaderboard)
 	add_child(leaderboard_button)
+	skin_shop = SKIN_SHOP.new()
+	skin_shop.wallet = rewards
+	skin_shop.changed.connect(save_profile)
+	skin_shop.closed.connect(close_skin_shop)
+	add_child(skin_shop)
+	shop_button = ARCADE_UI.button("СКИНЫ")
+	shop_button.size = Vector2(120, 48)
+	shop_button.z_index = 15
+	shop_button.pressed.connect(open_skin_shop)
+	add_child(shop_button)
 	if OS.get_cmdline_user_args().has("--capture-game"):
 		start_game()
 		tutorial_visible = false
@@ -314,7 +341,7 @@ func _notification(what: int) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if screen == Screen.GAME_OVER or leaderboard.visible:
+	if screen == Screen.GAME_OVER or leaderboard.visible or skin_shop.visible:
 		return
 	if event is InputEventScreenTouch or event is InputEventScreenDrag:
 		if screen == Screen.GAME and not paused and not tilt_control.needs_permission():
@@ -369,7 +396,7 @@ func update_visual_controller(delta: float) -> void:
 
 
 func get_weapon_pivot() -> Vector2:
-	var local_anchor := Vector2(weapon_anchor_x, -16)
+	var local_anchor := Vector2(weapon_anchor_x * (1.45 if rewards.equipped == REWARDS.ORANGE_SKIN else 1.0), -16)
 	return player_pos + local_anchor.rotated(visual_body_rotation)
 
 
@@ -418,6 +445,8 @@ func handle_game_press(position: Vector2) -> void:
 
 
 func start_game() -> void:
+	if is_instance_valid(skin_shop):
+		skin_shop.hide()
 	touch_control.reset()
 	leaderboard.start_run()
 	tilt_control.start()
@@ -438,6 +467,10 @@ func start_game() -> void:
 	jet_timer = 0.0
 	ghost_attack_timer = 2.5
 	ambient_rows_until_ghost = 1
+	case_rows = 5
+	safe_rows = rng.randi_range(65, 110)
+	run_coins = 0
+	reward_flights.clear()
 	respawn_timer = 0.0
 	respawn_platform = {}
 	previous_player_pos = player_pos
@@ -493,6 +526,21 @@ func close_leaderboard() -> void:
 		tilt_control.start()
 
 
+func open_skin_shop() -> void:
+	shop_was_paused = paused
+	if screen == Screen.GAME:
+		paused = true
+	touch_control.reset()
+	tilt_control.stop()
+	skin_shop.open()
+
+
+func close_skin_shop() -> void:
+	paused = shop_was_paused
+	if screen == Screen.GAME:
+		tilt_control.start()
+
+
 func nearest_visible_ghost(origin: Vector2) -> Dictionary:
 	var nearest: Dictionary = {}
 	var nearest_distance := INF
@@ -533,6 +581,9 @@ func launch_player(_tap_position: Vector2 = Vector2.ZERO) -> void:
 
 
 func update_game(delta: float) -> void:
+	for flight in reward_flights:
+		flight["age"] += delta
+	reward_flights = reward_flights.filter(func(flight): return flight["age"] < 2.6)
 	if respawn_timer > 0.0:
 		update_platforms(delta)
 		update_ghost_deaths(delta)
@@ -575,6 +626,7 @@ func update_game(delta: float) -> void:
 	update_rockets(delta)
 	update_particles(delta)
 	check_boots_pickups()
+	check_reward_pickups()
 	check_player_block_collisions()
 	if player_pos.y > WORLD_SIZE.y + 80.0:
 		lose_heart()
@@ -686,6 +738,15 @@ func spawn_block(y_position: float) -> void:
 	blocks.append({"pos": Vector2(x, y_position), "size": size, "skin": skin, "kind": int(art["kind"]), "hp": hp, "max_hp": hp, "spring": has_spring,
 		"fake": false, "boots": has_boots,
 		"motion_center": center_x, "motion_amplitude": amplitude, "motion_phase": phase, "motion_rate": motion_rate})
+	case_rows = maxi(0, case_rows - 1)
+	safe_rows = maxi(0, safe_rows - 1)
+	if not has_spring and not has_boots:
+		if safe_rows == 0:
+			blocks.back()["reward"] = "safe"
+			safe_rows = rng.randi_range(65, 110)
+		elif case_rows == 0:
+			blocks.back()["reward"] = "case"
+			case_rows = rng.randi_range(5, 9)
 	ambient_rows_until_ghost -= 1
 	if ambient_rows_until_ghost <= 0 and y_position < FIRST_PLATFORM_Y - 150 and not has_spring and not has_boots:
 		ambient_rows_until_ghost = rng.randi_range(2, 4)
@@ -878,6 +939,30 @@ func check_boots_pickups() -> void:
 			return
 
 
+func reward_rect(block: Dictionary) -> Rect2:
+	var reward_size := Vector2(62, 58) if block.get("reward", "") == "safe" else Vector2(68, 53)
+	return Rect2(block["pos"] + Vector2((block["size"].x - reward_size.x) * 0.5, -reward_size.y - 5), reward_size)
+
+
+func check_reward_pickups() -> void:
+	for block in blocks:
+		var kind: String = block.get("reward", "")
+		if kind.is_empty():
+			continue
+		var item := reward_rect(block)
+		var center := item.get_center()
+		var nearest := Geometry2D.get_closest_point_to_segment(center, previous_player_pos, player_pos)
+		if not Rect2(nearest - Vector2(30, 50), Vector2(60, 90)).intersects(item):
+			continue
+		block["reward"] = ""
+		if kind == "case":
+			run_coins += rewards.collect_case()
+		else:
+			rewards.collect_safe()
+		reward_flights.append({"kind": kind, "origin": center * WORLD_SCALE, "age": 0.0})
+		save_profile()
+
+
 func check_player_block_collisions() -> void:
 	if player_vel.y <= 0:
 		return
@@ -978,6 +1063,7 @@ func finish_run() -> void:
 	best_meters = maxi(best_meters, int(height_meters))
 	save_profile()
 	leaderboard.show_results(int(height_meters))
+	leaderboard.set_rewards_summary(run_coins, rewards.coins, rewards.promo_tickets)
 
 
 func spawn_muzzle(position: Vector2, direction: Vector2) -> void:
@@ -1039,6 +1125,7 @@ func load_profile() -> void:
 	smashed_total = int(config.get_value("progress", "smashed_total", 0))
 	best_meters = int(config.get_value("progress", "best_meters", 0))
 	player_name = str(config.get_value("player", "name", "")).left(20)
+	rewards.load_from(config)
 	sound_enabled = bool(config.get_value("settings", "sound", true))
 	haptics_enabled = bool(config.get_value("settings", "haptics", true))
 
@@ -1048,6 +1135,7 @@ func save_profile() -> void:
 	config.set_value("progress", "smashed_total", smashed_total)
 	config.set_value("progress", "best_meters", best_meters)
 	config.set_value("player", "name", player_name)
+	rewards.save_to(config)
 	config.set_value("settings", "sound", sound_enabled)
 	config.set_value("settings", "haptics", haptics_enabled)
 	config.save(profile_path)
@@ -1059,8 +1147,11 @@ func _exit_tree() -> void:
 
 func _draw() -> void:
 	if is_instance_valid(leaderboard_button):
-		leaderboard_button.visible = not leaderboard.visible and screen != Screen.GAME_OVER
-		leaderboard_button.position = Vector2(16, 16) if screen == Screen.MENU else Vector2(388, 161)
+		leaderboard_button.visible = not leaderboard.visible and not skin_shop.visible and screen != Screen.GAME_OVER
+		leaderboard_button.position = Vector2(16, 18) if screen == Screen.MENU else Vector2(370, 161)
+	if is_instance_valid(shop_button):
+		shop_button.visible = not leaderboard.visible and not skin_shop.visible and screen != Screen.GAME_OVER
+		shop_button.position = Vector2(404, 18) if screen == Screen.MENU else Vector2(16, 161)
 	if is_instance_valid(platform_layer):
 		platform_layer.visible = screen != Screen.MENU
 		platform_layer.queue_redraw()
@@ -1075,9 +1166,14 @@ func _draw() -> void:
 
 
 func draw_menu() -> void:
-	draw_texture_rect(MENU_COVER_TEX, Rect2(Vector2.ZERO, VIEW_SIZE), false)
-	var pulse := 0.35 + 0.25 * sin(menu_time * 3.4)
-	draw_rect(cta_rect.grow(3), Color(0.59, 1.0, 0.13, pulse), false, 3)
+	draw_texture_rect(NIGHT_CITY_POSTER, Rect2(Vector2.ZERO, VIEW_SIZE), false)
+	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color(0.015, 0.02, 0.025, 0.28))
+	draw_texture_rect(NEW_LOGO, Rect2(35, 101, 470, 272), false)
+	var preview: Texture2D = preload("res://assets/release-september/prisoner-preview.tres") if rewards.equipped == REWARDS.ORANGE_SKIN else HERO_TEX
+	draw_texture_rect(preview, fit_texture(preview, Rect2(99, 369, 342, 262)), false)
+	draw_texture_rect(START_BUTTON_TEX, cta_rect, false)
+	draw_label("МОНЕТЫ: " + str(rewards.coins), Vector2(120, 92), 21, GOLD, HORIZONTAL_ALIGNMENT_CENTER, 300, 2)
+	draw_label("СОБИРАЙ КЕЙСЫ • ОТКРЫВАЙ СКИНЫ", Vector2(20, 808), 19, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 500, 2)
 	if tilt_control.uses_keyboard():
 		draw_keyboard_help(852.0, true)
 	else:
@@ -1085,6 +1181,33 @@ func draw_menu() -> void:
 		draw_label("УДЕРЖИВАЙ ПАЛЕЦ ИЛИ ВЕДИ В СТОРОНУ", Vector2(40, 880), 17, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 460, 1)
 		draw_label("КОРОТКИЙ ТАП — ВЫСТРЕЛ", Vector2(40, 905), 17, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 460, 1)
 		draw_label("ПРЫЖКИ И ПРИЦЕЛИВАНИЕ — АВТОМАТИЧЕСКИ", Vector2(40, 927), 13, PALE_CYAN, HORIZONTAL_ALIGNMENT_CENTER, 460, 1)
+
+
+func fit_texture(texture: Texture2D, bounds: Rect2) -> Rect2:
+	var factor := minf(bounds.size.x / texture.get_width(), bounds.size.y / texture.get_height())
+	var fitted := texture.get_size() * factor
+	return Rect2(bounds.position + (bounds.size - fitted) * 0.5, fitted)
+
+
+func draw_reward_flights() -> void:
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	for flight in reward_flights:
+		var age: float = flight["age"]
+		var alpha := clampf((2.6 - age) / 0.5, 0.0, 1.0)
+		if flight["kind"] == "case":
+			var point: Vector2 = flight["origin"].lerp(Vector2(105, 126), smoothstep(0.0, 1.3, age))
+			draw_texture_rect(CASE_TEX, Rect2(point - Vector2(22, 17), Vector2(44, 34)), false, Color(1, 1, 1, alpha))
+			draw_label("+100", point + Vector2(-32, -24), 26, Color(0.75, 1, 0.1, alpha), HORIZONTAL_ALIGNMENT_CENTER, 64, 2)
+		else:
+			var progress := smoothstep(0.0, 0.45, age)
+			var point: Vector2 = flight["origin"].lerp(Vector2(270, 278), progress)
+			var ticket_size := Vector2(242, 104) * lerpf(0.25, 1.0, progress)
+			var ticket := Rect2(point - ticket_size * 0.5, ticket_size)
+			draw_panel(ticket, Color(1, 0.41, 0.015, alpha), Color(1, 0.85, 0.32, alpha), 4, 8)
+			if progress > 0.8:
+				draw_label("ПРОМОБИЛЕТ", point + Vector2(-116, -25), 17, Color(0.08, 0.06, 0.02, alpha), HORIZONTAL_ALIGNMENT_CENTER, 232, 1)
+				draw_label("-5% SNWEED", point + Vector2(-116, 12), 29, Color(1, 1, 0.93, alpha), HORIZONTAL_ALIGNMENT_CENTER, 232, 2)
+				draw_label("АКЦИЯ СКОРО", point + Vector2(-116, 37), 14, Color(0.08, 0.06, 0.02, alpha), HORIZONTAL_ALIGNMENT_CENTER, 232, 1)
 
 
 func draw_keyboard_help(top: float, show_start: bool = false) -> void:
@@ -1129,7 +1252,11 @@ func draw_game() -> void:
 		if block.get("boots", false):
 			var boots := boots_rect(block)
 			draw_circle(boots.get_center(), 33 + sin(menu_time * 5.0) * 2, Color(1, 0.65, 0.15, 0.2))
-			draw_texture_rect(BOOTS_TEX, boots, false)
+			draw_texture_rect(BOOTS_TEX, fit_texture(BOOTS_TEX, boots), false)
+		if not str(block.get("reward", "")).is_empty():
+			var item := reward_rect(block)
+			draw_circle(item.get_center(), 37, Color(1, 0.52, 0.03, 0.17 + sin(menu_time * 4) * 0.05))
+			draw_texture_rect(SAFE_TEX if block["reward"] == "safe" else CASE_TEX, item, false)
 	for ghost in ghosts:
 		draw_enemy_ghost(ghost)
 	draw_ghost_deaths()
@@ -1141,6 +1268,7 @@ func draw_game() -> void:
 	draw_particles()
 	draw_player()
 	draw_game_hud()
+	draw_reward_flights()
 	if screen_flash > 0.0:
 		draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color(1, 0.92, 0.68, screen_flash * 0.42))
 	if damage_flash > 0.0:
@@ -1181,7 +1309,13 @@ func draw_player() -> void:
 	draw_set_transform_matrix(world_draw_transform(label_position, weapon_draw_state["rotation"]))
 	draw_label("SNW", Vector2(-13, 4), 9, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 26, 1)
 	draw_set_transform_matrix(world_draw_transform(player_pos + current_shake_offset, body_rotation, scale_value))
-	if jet_timer > 0.0:
+	if rewards.equipped == REWARDS.ORANGE_SKIN:
+		if jet_timer > 0.0:
+			for x in [-29, 30]:
+				draw_colored_polygon(PackedVector2Array([Vector2(x - 10, 48), Vector2(x + 9, 48), Vector2(x, 87 + sin(menu_time * 36) * 12)]), ORANGE)
+			draw_colored_polygon(PackedVector2Array([Vector2(-33, 48), Vector2(-24, 48), Vector2(-29, 74)]), GOLD)
+		draw_texture_rect(PRISONER_TEX, Rect2(-56, -75, 112, 132), false, tint)
+	elif jet_timer > 0.0:
 		draw_texture_rect(HERO_BODY_TEX, Rect2(-67, -57, 134, 114), false, tint)
 	else:
 		draw_polygon(hero_body_polygon, PackedColorArray([tint]), hero_body_uvs, HERO_BODY_TEX)
@@ -1190,6 +1324,10 @@ func draw_player() -> void:
 
 func draw_game_hud() -> void:
 	draw_score_counter()
+	draw_texture_rect(CASE_TEX, Rect2(19, 113, 33, 26), false)
+	draw_label(str(rewards.coins), Vector2(59, 136), 21, GOLD, HORIZONTAL_ALIGNMENT_LEFT, 145, 2)
+	if rewards.promo_tickets > 0:
+		draw_label("-5% × " + str(rewards.promo_tickets), Vector2(375, 136), 18, LIME, HORIZONTAL_ALIGNMENT_RIGHT, 145, 2)
 	if jet_timer > 0.0:
 		draw_texture_rect(BOOTS_TEX, Rect2(204, 125, 30, 30), false)
 		draw_rect(Rect2(244, 133, 92, 14), INK)

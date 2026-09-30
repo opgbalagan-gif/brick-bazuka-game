@@ -9,7 +9,7 @@
   input.autocomplete = 'nickname';
   input.enterKeyHint = 'done';
   input.setAttribute('aria-label', 'Твоё имя для рейтинга');
-  input.style.cssText = 'position:fixed;display:none;z-index:24;box-sizing:border-box;background:#061420;color:#f5f8ee;border:2px solid #80df41;border-radius:10px;padding:0 12px;font-family:Arial,sans-serif;outline:none;touch-action:manipulation;user-select:text;-webkit-user-select:text;';
+  input.style.cssText = 'position:fixed;display:none;z-index:24;box-sizing:border-box;background:#0c1012;color:#fff7e9;border:2px solid #ff7a08;border-radius:10px;padding:0 12px;font-family:Arial,sans-serif;outline:none;touch-action:manipulation;user-select:text;-webkit-user-select:text;';
   document.body.appendChild(input);
   let visible = false, submit = false, rect = [0, 0, 0, 0];
   function place() {
