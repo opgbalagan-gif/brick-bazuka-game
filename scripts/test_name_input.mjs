@@ -11,6 +11,7 @@ class Element extends Target {
   style = {}; value = ''; readOnly = false;
   set id(value) {elements.set(value, this);}
   setAttribute() {}
+  focus() { document.activeElement = this; }
   blur() { if (document.activeElement === this) document.activeElement = null; }
 }
 let bounds = {left: 100, top: 20, width: 540, height: 960};
@@ -43,6 +44,16 @@ assert.equal(bridge.consume_submit(), false, 'One Enter must enqueue only one su
 bridge.set_editable(false);
 input.fire('keydown', {key: 'Enter'});
 assert.equal(bridge.consume_submit(), false, 'A submitted score must not submit twice');
+const edit = elements.get('brick-edit-name');
+edit.fire('click');
+assert.equal(input.readOnly, false);
+assert.equal(document.activeElement, input, 'Edit must focus the browser input within the gesture');
+assert.equal(bridge.consume_edit(), true);
+assert.equal(bridge.consume_edit(), false);
+bridge.set_editable(false);
+input.fire('pointerdown');
+assert.equal(input.readOnly, false, 'Tapping a saved name must unlock editing');
+assert.equal(bridge.consume_edit(), true);
 bridge.set_editable(true);
 bounds = {left: 0, top: 0, width: 1080, height: 960};
 window.fire('resize');

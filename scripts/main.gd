@@ -1453,16 +1453,31 @@ func draw_game_hud() -> void:
 
 
 func draw_score_counter() -> void:
-	# The run's existing height score, rendered as original bubble-letter numerals.
+	# Block numerals with a slashed zero, matching the supplied pixel reference.
+	var glyphs := [
+		["01110", "11011", "10111", "10101", "11101", "11011", "01110"],
+		["00110", "01110", "00110", "00110", "00110", "00110", "01111"],
+		["01110", "11011", "00011", "00110", "01100", "11000", "11111"],
+		["11110", "00011", "00011", "01110", "00011", "00011", "11110"],
+		["00011", "00111", "01111", "11011", "11111", "00011", "00011"],
+		["11111", "11000", "11000", "11110", "00011", "00011", "11110"],
+		["01110", "11000", "11000", "11110", "11011", "11011", "01110"],
+		["11111", "00011", "00110", "00110", "01100", "01100", "01100"],
+		["01110", "11011", "11011", "01110", "11011", "11011", "01110"],
+		["01110", "11011", "11011", "01111", "00011", "00011", "01110"]
+	]
 	var digits := str(maxi(0, int(height_meters)))
-	var scale_value := minf(0.86, 360.0 / (float(digits.length()) * 76.0 + 14.0))
-	var digit_size := Vector2(90, 126) * scale_value
-	var advance := 76.0 * scale_value
-	var total_width := advance * (digits.length() - 1) + digit_size.x
-	var origin := Vector2((VIEW_SIZE.x - total_width) * 0.5, 14)
-	for index in digits.length():
-		var numeral := int(digits.substr(index, 1))
-		draw_texture_rect_region(SCORE_DIGITS_TEX, Rect2(origin + Vector2(index * advance, 0), digit_size), Rect2(numeral * 90, 0, 90, 126))
+	var pixel := floorf(minf(12.0, 360.0 / (digits.length() * 6 - 1)))
+	var origin := Vector2(floorf((VIEW_SIZE.x - (digits.length() * 6 - 1) * pixel) * 0.5), 18)
+	# Outline all blocks first so adjacent pixels join without internal seams.
+	for outline in [true, false]:
+		for index in digits.length():
+			var rows: Array = glyphs[int(digits[index])]
+			for y in 7:
+				for x in 5:
+					if rows[y][x] == "1":
+						var rect := Rect2(origin + Vector2(index * 6 + x, y) * pixel, Vector2.ONE * pixel)
+						draw_rect(rect.grow(3) if outline else rect, Color.BLACK if outline else Color("b7f30c"))
 
 
 func draw_tutorial() -> void:

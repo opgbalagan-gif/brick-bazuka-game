@@ -91,6 +91,9 @@ func _process(delta: float) -> void:
 		_process_queue()
 	if not visible or web_name_input == null:
 		return
+	if bool(web_name_input.consume_edit()):
+		editing_name = true
+		_sync_profile()
 	var rect := name_input.get_global_rect()
 	web_name_input.place(rect.position.x, rect.position.y, rect.size.x, rect.size.y)
 	web_name_input.set_editable(name_input.editable)
