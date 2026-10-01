@@ -79,7 +79,7 @@ func select_device(desktop: bool) -> void:
 	practice.reset()
 	phone_button.modulate = Color("8f969d") if desktop else Color.WHITE
 	desktop_button.modulate = Color.WHITE if desktop else Color("8f969d")
-	instructions.text = "СТРЕЛКИ / A D (Ф В) — двигайся.\nПРОБЕЛ или клик — стреляй.\nESC — пауза во время игры.\nВ поле ниже проверь движение и выстрел." if desktop else "Держи слева / справа — двигайся.\nИли веди палец в нужную сторону.\nОтпусти — остановись. Короткий тап — выстрел.\nВторым пальцем можно стрелять на ходу."
+	instructions.text = "СТРЕЛКИ / A D (Ф В) — двигайся.\nПРОБЕЛ или клик — стреляй.\nESC — пауза во время игры.\nВ поле ниже проверь движение и выстрел." if desktop else "Держи слева / справа — двигайся.\nИли веди палец в нужную сторону.\nОтпусти — остановись. Короткий тап — выстрел.\nВторым пальцем можно стрелять на ходу.\nДве полоски сверху — пауза и настройки."
 	refresh()
 
 func refresh() -> void:

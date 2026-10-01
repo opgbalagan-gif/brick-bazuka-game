@@ -53,6 +53,7 @@ const REWARDS := preload("res://scripts/rewards.gd")
 const SKIN_SHOP := preload("res://scripts/skin_shop.gd")
 const ARCADE_UI := preload("res://scripts/arcade_ui.gd")
 const CONTROL_SETTINGS := preload("res://scripts/control_settings.gd")
+const PAUSE_MENU := preload("res://scripts/pause_menu.gd")
 const CASH_BURST := preload("res://scripts/cash_burst.gd")
 const CASE_TEX := preload("res://assets/release-september/cash-case.tres")
 const SAFE_TEX := preload("res://assets/release-september/promo-safe.tres")
@@ -193,6 +194,8 @@ var cash_burst := CASH_BURST.new()
 var control_settings
 var settings_button: Button
 var settings_was_paused := false
+var pause_menu
+var pause_button: Button
 
 
 func _ready() -> void:
@@ -251,6 +254,18 @@ func _ready() -> void:
 	settings_button.z_index = 15
 	settings_button.pressed.connect(open_control_settings)
 	add_child(settings_button)
+	pause_menu = PAUSE_MENU.new()
+	pause_menu.resume_requested.connect(resume_game)
+	pause_menu.settings_requested.connect(open_control_settings)
+	pause_menu.restart_requested.connect(start_game)
+	pause_menu.home_requested.connect(return_to_menu)
+	add_child(pause_menu)
+	pause_button = PAUSE_MENU.make_pause_button()
+	pause_button.position = Vector2(464, 18)
+	pause_button.z_index = 15
+	pause_button.pressed.connect(open_pause)
+	add_child(pause_button)
+	sync_pause_controls()
 	if OS.get_cmdline_user_args().has("--capture-game"):
 		start_game()
 		tutorial_visible = false
@@ -339,18 +354,20 @@ func _process(delta: float) -> void:
 	sync_video_background()
 	if screen == Screen.GAME and tutorial_visible and not paused and not tilt_control.needs_permission() and absf(tilt_control.read_axis()) > 0.05:
 		tutorial_visible = false
-	menu_time += delta
+	if not paused:
+		menu_time += delta
 	if tutorial_visible and not paused:
 		tutorial_time += delta
-	toast_timer = maxf(0.0, toast_timer - delta)
-	shoot_timer = maxf(0.0, shoot_timer - delta)
-	reload_timer = maxf(0.0, reload_timer - delta)
-	hit_timer = maxf(0.0, hit_timer - delta)
-	contact_cooldown = maxf(0.0, contact_cooldown - delta)
-	damage_flash = maxf(0.0, damage_flash - delta * 3.0)
-	weapon_kick = maxf(0.0, weapon_kick - delta * 6.5)
-	camera_shake = maxf(0.0, camera_shake - delta * 3.8)
-	screen_flash = maxf(0.0, screen_flash - delta * 4.5)
+	if not paused:
+		toast_timer = maxf(0.0, toast_timer - delta)
+		shoot_timer = maxf(0.0, shoot_timer - delta)
+		reload_timer = maxf(0.0, reload_timer - delta)
+		hit_timer = maxf(0.0, hit_timer - delta)
+		contact_cooldown = maxf(0.0, contact_cooldown - delta)
+		damage_flash = maxf(0.0, damage_flash - delta * 3.0)
+		weapon_kick = maxf(0.0, weapon_kick - delta * 6.5)
+		camera_shake = maxf(0.0, camera_shake - delta * 3.8)
+		screen_flash = maxf(0.0, screen_flash - delta * 4.5)
 	if screen == Screen.GAME and not paused and not tutorial_visible and not tilt_control.needs_permission():
 		touch_control.advance(delta)
 		update_game(delta)
@@ -388,13 +405,15 @@ func _unhandled_input(event: InputEvent) -> void:
 				start_game()
 			elif screen == Screen.GAME:
 				if paused:
-					paused = false
+					resume_game()
 				else:
 					handle_game_press(player_pos + Vector2(0, 260))
 		elif key == KEY_ESCAPE:
 			if screen == Screen.GAME:
-				paused = not paused
-				touch_control.reset()
+				if paused:
+					resume_game()
+				else:
+					open_pause()
 
 
 func update_visual_controller(delta: float) -> void:
@@ -459,16 +478,14 @@ func handle_menu_press(position: Vector2) -> void:
 
 func handle_game_press(position: Vector2) -> void:
 	if paused:
-		if Rect2(120, 440, 300, 62).has_point(position):
-			paused = false
-		elif Rect2(120, 520, 300, 62).has_point(position):
-			return_to_menu()
 		return
 	tutorial_visible = false
 	launch_player()
 
 
 func start_game() -> void:
+	if is_instance_valid(pause_menu):
+		pause_menu.hide()
 	if is_instance_valid(control_settings):
 		control_settings.hide()
 	if is_instance_valid(skin_shop):
@@ -478,6 +495,7 @@ func start_game() -> void:
 	tilt_control.start()
 	screen = Screen.GAME
 	paused = false
+	sync_pause_controls()
 	player_pos = Vector2(WORLD_SIZE.x * 0.5, FIRST_PLATFORM_Y - 95.0)
 	player_vel = Vector2(0, -80)
 	height_meters = 0.0
@@ -529,11 +547,14 @@ func start_game() -> void:
 
 
 func return_to_menu() -> void:
+	pause_menu.hide()
+	control_settings.hide()
 	touch_control.reset()
 	leaderboard.dismiss()
 	tilt_control.stop()
 	screen = Screen.MENU
 	paused = false
+	sync_pause_controls()
 	tutorial_visible = false
 	sync_video_background()
 	save_profile()
@@ -973,12 +994,48 @@ func reward_rect(block: Dictionary) -> Rect2:
 	return Rect2(block["pos"] + Vector2((block["size"].x - reward_size.x) * 0.5, -reward_size.y - 5), reward_size)
 
 
+func sync_pause_controls() -> void:
+	if not is_instance_valid(pause_menu):
+		return
+	var other_overlay: bool = control_settings.visible or leaderboard.visible or skin_shop.visible
+	pause_button.visible = screen == Screen.GAME and not paused and not other_overlay
+	var show_pause: bool = screen == Screen.GAME and paused and not other_overlay
+	if show_pause and not pause_menu.visible:
+		pause_menu.open(int(height_meters))
+	elif not show_pause:
+		pause_menu.hide()
+
+
+func open_pause() -> void:
+	if screen != Screen.GAME:
+		return
+	paused = true
+	touch_control.reset()
+	tilt_control.stop()
+	sync_video_background()
+	sync_pause_controls()
+	queue_redraw()
+
+
+func resume_game() -> void:
+	if screen != Screen.GAME:
+		return
+	paused = false
+	touch_control.reset()
+	tilt_control.start()
+	sync_pause_controls()
+	sync_video_background()
+	queue_redraw()
+
+
 func open_control_settings() -> void:
 	settings_was_paused = paused
 	paused = true
 	touch_control.reset()
 	tilt_control.stop()
 	control_settings.open(touch_sensitivity, reduced_effects)
+	control_settings.close_button.text = "НАЗАД К ПАУЗЕ" if screen == Screen.GAME and settings_was_paused else "ГОТОВО"
+	sync_pause_controls()
 	queue_redraw()
 
 
@@ -987,6 +1044,7 @@ func close_control_settings() -> void:
 	touch_control.reset()
 	if screen == Screen.GAME and not paused:
 		tilt_control.start()
+	sync_pause_controls()
 	queue_redraw()
 
 
@@ -1197,6 +1255,7 @@ func _exit_tree() -> void:
 
 
 func _draw() -> void:
+	sync_pause_controls()
 	var menu_buttons_visible: bool = screen == Screen.MENU and not leaderboard.visible and not skin_shop.visible and not control_settings.visible
 	if is_instance_valid(settings_button):
 		settings_button.visible = menu_buttons_visible
@@ -1292,7 +1351,7 @@ func world_draw_transform(origin: Vector2 = Vector2.ZERO, rotation: float = 0.0,
 
 func draw_game() -> void:
 	current_shake_offset = Vector2.ZERO
-	if camera_shake > 0.0 and not reduced_effects:
+	if camera_shake > 0.0 and not reduced_effects and not paused:
 		current_shake_offset = Vector2(rng.randf_range(-1, 1), rng.randf_range(-1, 1)) * camera_shake * 6.0
 	draw_set_transform_matrix(world_draw_transform(current_shake_offset))
 	platform_layer.position = current_shake_offset * WORLD_SCALE
@@ -1326,8 +1385,6 @@ func draw_game() -> void:
 		draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color(1, 0.13, 0.18, damage_flash * 0.25))
 	if tutorial_visible:
 		draw_tutorial()
-	elif paused:
-		draw_pause()
 
 
 func draw_player() -> void:
@@ -1385,7 +1442,7 @@ func draw_game_hud() -> void:
 func draw_score_counter() -> void:
 	# The run's existing height score, rendered as original bubble-letter numerals.
 	var digits := str(maxi(0, int(height_meters)))
-	var scale_value := minf(0.86, 420.0 / (float(digits.length()) * 76.0 + 14.0))
+	var scale_value := minf(0.86, 360.0 / (float(digits.length()) * 76.0 + 14.0))
 	var digit_size := Vector2(90, 126) * scale_value
 	var advance := 76.0 * scale_value
 	var total_width := advance * (digits.length() - 1) + digit_size.x
@@ -1418,16 +1475,6 @@ func draw_tutorial() -> void:
 	# Keep the fingertip anchored to the tap while the glove gently compresses.
 	draw_texture_rect(TAP_GLOVE_TEX, Rect2(-130, -347, 300, 352), false)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-
-
-func draw_pause() -> void:
-	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color(0, 0, 0, 0.70))
-	draw_panel(Rect2(75, 315, 390, 315), Color("071f38"), CYAN, 4, 14)
-	draw_label("PAUSED", Vector2(75, 392), 42, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 390, 5)
-	draw_panel(Rect2(120, 440, 300, 62), Color("2ab43d"), LIME, 3, 9)
-	draw_label("RESUME", Vector2(120, 482), 23, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 300, 3)
-	draw_panel(Rect2(120, 520, 300, 62), Color("0b3153"), CYAN, 3, 9)
-	draw_label("HOME", Vector2(120, 562), 23, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 300, 3)
 
 
 func draw_particles() -> void:

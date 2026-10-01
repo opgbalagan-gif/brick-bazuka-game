@@ -90,8 +90,12 @@ func run() -> void:
 	game.paused = true
 	game._process(0.1)
 	assert(not game.touch_control.is_steering(), "Pause must clear touch steering")
-	touch(game, 0, Vector2(200, 460), true)
-	touch(game, 0, Vector2(200, 460), false)
+	game.sync_pause_controls()
+	for pressed in [true, false]:
+		var resume_touch := InputEventScreenTouch.new()
+		resume_touch.position = game.pause_menu.resume_button.get_global_rect().get_center()
+		resume_touch.pressed = pressed
+		root.push_input(resume_touch, true)
 	assert(not game.paused and game.rockets.is_empty(), "Touching resume must not also fire")
 	touch(game, 0, Vector2(80, 600), true)
 	game.finish_run()
