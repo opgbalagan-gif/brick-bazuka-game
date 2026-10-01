@@ -10,6 +10,7 @@ const SCREEN_CENTER := 270.0
 var touches: Dictionary = {}
 var primary_id := -1
 var axis := 0.0
+var sensitivity := 1.0
 
 
 func reset() -> void:
@@ -60,7 +61,7 @@ func update_axis() -> void:
 	var touch: Dictionary = touches[primary_id]
 	if touch["drag"]:
 		var distance: float = touch["pos"].x - touch["origin"].x
-		axis = signf(distance) * clampf((absf(distance) - 8.0) / (FULL_DRAG - 8.0), 0.0, 1.0)
+		axis = signf(distance) * clampf((absf(distance) - 8.0) * sensitivity / (FULL_DRAG - 8.0), 0.0, 1.0)
 	elif touch["held"]:
 		var distance: float = touch["pos"].x - SCREEN_CENTER
 		axis = signf(distance) if absf(distance) > 24.0 else 0.0

@@ -52,6 +52,8 @@ const TOUCH_CONTROL := preload("res://scripts/touch_control.gd")
 const REWARDS := preload("res://scripts/rewards.gd")
 const SKIN_SHOP := preload("res://scripts/skin_shop.gd")
 const ARCADE_UI := preload("res://scripts/arcade_ui.gd")
+const CONTROL_SETTINGS := preload("res://scripts/control_settings.gd")
+const CASH_BURST := preload("res://scripts/cash_burst.gd")
 const CASE_TEX := preload("res://assets/release-september/cash-case.tres")
 const SAFE_TEX := preload("res://assets/release-september/promo-safe.tres")
 const PRISONER_TEX := preload("res://assets/release-september/prisoner-body.tres")
@@ -119,6 +121,8 @@ var tutorial_visible := false
 var tutorial_time := 0.0
 var sound_enabled := true
 var haptics_enabled := true
+var touch_sensitivity := 1.0
+var reduced_effects := false
 var menu_time := 0.0
 var toast_text := ""
 var toast_timer := 0.0
@@ -185,6 +189,10 @@ var case_rows := 5
 var safe_rows := 80
 var run_coins := 0
 var reward_flights: Array = []
+var cash_burst := CASH_BURST.new()
+var control_settings
+var settings_button: Button
+var settings_was_paused := false
 
 
 func _ready() -> void:
@@ -200,6 +208,7 @@ func _ready() -> void:
 	tilt_control = TILT_CONTROL.new()
 	add_child(tilt_control)
 	touch_control = TOUCH_CONTROL.new()
+	touch_control.sensitivity = touch_sensitivity
 	touch_control.shot_requested.connect(launch_player)
 	add_child(touch_control)
 	setup_video_background()
@@ -227,6 +236,21 @@ func _ready() -> void:
 	shop_button.z_index = 15
 	shop_button.pressed.connect(open_skin_shop)
 	add_child(shop_button)
+	control_settings = CONTROL_SETTINGS.new()
+	control_settings.closed.connect(close_control_settings)
+	control_settings.changed.connect(func(value: float, reduced: bool):
+		touch_sensitivity = value
+		touch_control.sensitivity = value
+		reduced_effects = reduced
+		save_profile())
+	add_child(control_settings)
+	settings_button = ARCADE_UI.button("НАСТРОЙКИ И УПРАВЛЕНИЕ", true)
+	settings_button.position = Vector2(40, 836)
+	settings_button.size = Vector2(460, 66)
+	settings_button.add_theme_font_size_override("font_size", 24)
+	settings_button.z_index = 15
+	settings_button.pressed.connect(open_control_settings)
+	add_child(settings_button)
 	if OS.get_cmdline_user_args().has("--capture-game"):
 		start_game()
 		tutorial_visible = false
@@ -341,7 +365,7 @@ func _notification(what: int) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if screen == Screen.GAME_OVER or leaderboard.visible or skin_shop.visible:
+	if screen == Screen.GAME_OVER or leaderboard.visible or skin_shop.visible or control_settings.visible:
 		return
 	if event is InputEventScreenTouch or event is InputEventScreenDrag:
 		if screen == Screen.GAME and not paused and not tilt_control.needs_permission():
@@ -445,6 +469,8 @@ func handle_game_press(position: Vector2) -> void:
 
 
 func start_game() -> void:
+	if is_instance_valid(control_settings):
+		control_settings.hide()
 	if is_instance_valid(skin_shop):
 		skin_shop.hide()
 	touch_control.reset()
@@ -471,6 +497,7 @@ func start_game() -> void:
 	safe_rows = rng.randi_range(65, 110)
 	run_coins = 0
 	reward_flights.clear()
+	cash_burst.clear()
 	respawn_timer = 0.0
 	respawn_platform = {}
 	previous_player_pos = player_pos
@@ -582,6 +609,7 @@ func launch_player(_tap_position: Vector2 = Vector2.ZERO) -> void:
 
 
 func update_game(delta: float) -> void:
+	cash_burst.update(delta)
 	for flight in reward_flights:
 		flight["age"] += delta
 	reward_flights = reward_flights.filter(func(flight): return flight["age"] < 2.6)
@@ -945,6 +973,23 @@ func reward_rect(block: Dictionary) -> Rect2:
 	return Rect2(block["pos"] + Vector2((block["size"].x - reward_size.x) * 0.5, -reward_size.y - 5), reward_size)
 
 
+func open_control_settings() -> void:
+	settings_was_paused = paused
+	paused = true
+	touch_control.reset()
+	tilt_control.stop()
+	control_settings.open(touch_sensitivity, reduced_effects)
+	queue_redraw()
+
+
+func close_control_settings() -> void:
+	paused = settings_was_paused
+	touch_control.reset()
+	if screen == Screen.GAME and not paused:
+		tilt_control.start()
+	queue_redraw()
+
+
 func check_reward_pickups() -> void:
 	for block in blocks:
 		var kind: String = block.get("reward", "")
@@ -958,6 +1003,7 @@ func check_reward_pickups() -> void:
 		block["reward"] = ""
 		if kind == "case":
 			run_coins += rewards.collect_case()
+			cash_burst.spawn(center * WORLD_SCALE, reduced_effects)
 		else:
 			rewards.collect_safe()
 		reward_flights.append({"kind": kind, "origin": center * WORLD_SCALE, "age": 0.0})
@@ -1129,6 +1175,8 @@ func load_profile() -> void:
 	rewards.load_from(config)
 	sound_enabled = bool(config.get_value("settings", "sound", true))
 	haptics_enabled = bool(config.get_value("settings", "haptics", true))
+	touch_sensitivity = clampf(float(config.get_value("settings", "touch_sensitivity", 1.0)), 0.7, 1.4)
+	reduced_effects = bool(config.get_value("settings", "reduced_effects", false))
 
 
 func save_profile() -> void:
@@ -1139,6 +1187,8 @@ func save_profile() -> void:
 	rewards.save_to(config)
 	config.set_value("settings", "sound", sound_enabled)
 	config.set_value("settings", "haptics", haptics_enabled)
+	config.set_value("settings", "touch_sensitivity", touch_sensitivity)
+	config.set_value("settings", "reduced_effects", reduced_effects)
 	config.save(profile_path)
 
 
@@ -1147,11 +1197,14 @@ func _exit_tree() -> void:
 
 
 func _draw() -> void:
+	var menu_buttons_visible: bool = screen == Screen.MENU and not leaderboard.visible and not skin_shop.visible and not control_settings.visible
+	if is_instance_valid(settings_button):
+		settings_button.visible = menu_buttons_visible
 	if is_instance_valid(leaderboard_button):
-		leaderboard_button.visible = screen == Screen.MENU and not leaderboard.visible and not skin_shop.visible
+		leaderboard_button.visible = menu_buttons_visible
 		leaderboard_button.position = Vector2(16, 18) if screen == Screen.MENU else Vector2(370, 161)
 	if is_instance_valid(shop_button):
-		shop_button.visible = screen == Screen.MENU and not leaderboard.visible and not skin_shop.visible
+		shop_button.visible = menu_buttons_visible
 		shop_button.position = Vector2(404, 18) if screen == Screen.MENU else Vector2(16, 161)
 	if is_instance_valid(platform_layer):
 		platform_layer.visible = screen != Screen.MENU
@@ -1175,14 +1228,7 @@ func draw_menu() -> void:
 	draw_texture_rect(START_BUTTON_TEX, cta_rect, false)
 	draw_label("МОНЕТЫ: " + str(rewards.coins), Vector2(120, 92), 21, GOLD, HORIZONTAL_ALIGNMENT_CENTER, 300, 2)
 	draw_label("СОБИРАЙ КЕЙСЫ • ОТКРЫВАЙ СКИНЫ", Vector2(20, 808), 19, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 500, 2)
-	if tilt_control.uses_keyboard():
-		draw_keyboard_help(852.0, true)
-	else:
-		draw_panel(Rect2(40, 828, 460, 112), Color(0.02, 0.07, 0.12, 0.94), CYAN, 2, 10)
-		draw_label("ДЕРЖИ ПАЛЕЦ СЛЕВА — ДВИГАЙСЯ ВЛЕВО", Vector2(40, 853), 15, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 460, 1)
-		draw_label("ДЕРЖИ СПРАВА — ДВИГАЙСЯ ВПРАВО", Vector2(40, 877), 15, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 460, 1)
-		draw_label("КОРОТКОЕ КАСАНИЕ — ВЫСТРЕЛ", Vector2(40, 901), 17, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 460, 1)
-		draw_label("ПРЫЖКИ И ПРИЦЕЛ — АВТОМАТИЧЕСКИ", Vector2(40, 925), 13, PALE_CYAN, HORIZONTAL_ALIGNMENT_CENTER, 460, 1)
+	draw_label("КАК ИГРАТЬ? ОТКРОЙ И ПОПРОБУЙ", Vector2(40, 928), 17, PALE_CYAN, HORIZONTAL_ALIGNMENT_CENTER, 460, 1)
 
 
 func fit_texture(texture: Texture2D, bounds: Rect2) -> Rect2:
@@ -1197,9 +1243,11 @@ func draw_reward_flights() -> void:
 		var age: float = flight["age"]
 		var alpha := clampf((2.6 - age) / 0.5, 0.0, 1.0)
 		if flight["kind"] == "case":
-			var point: Vector2 = flight["origin"].lerp(Vector2(105, 126), smoothstep(0.0, 1.3, age))
-			draw_texture_rect(CASE_TEX, Rect2(point - Vector2(22, 17), Vector2(44, 34)), false, Color(1, 1, 1, alpha))
-			draw_label("+100", point + Vector2(-32, -24), 26, Color(0.75, 1, 0.1, alpha), HORIZONTAL_ALIGNMENT_CENTER, 64, 2)
+			var point: Vector2 = flight["origin"] + Vector2(0, -34 - age * 38)
+			if age < 0.4:
+				var pop_size := Vector2(68, 53) * (1.0 + age * 1.5)
+				draw_texture_rect(CASE_TEX, Rect2(flight["origin"] - pop_size * 0.5, pop_size), false, Color(1, 1, 1, 1 - age / 0.4))
+			draw_label("+100", point + Vector2(-55, -24), 36, Color(0.75, 1, 0.1, alpha), HORIZONTAL_ALIGNMENT_CENTER, 110, 3)
 		else:
 			var progress := smoothstep(0.0, 0.45, age)
 			var point: Vector2 = flight["origin"].lerp(Vector2(270, 278), progress)
@@ -1244,7 +1292,7 @@ func world_draw_transform(origin: Vector2 = Vector2.ZERO, rotation: float = 0.0,
 
 func draw_game() -> void:
 	current_shake_offset = Vector2.ZERO
-	if camera_shake > 0.0:
+	if camera_shake > 0.0 and not reduced_effects:
 		current_shake_offset = Vector2(rng.randf_range(-1, 1), rng.randf_range(-1, 1)) * camera_shake * 6.0
 	draw_set_transform_matrix(world_draw_transform(current_shake_offset))
 	platform_layer.position = current_shake_offset * WORLD_SCALE
@@ -1269,11 +1317,12 @@ func draw_game() -> void:
 		draw_set_transform_matrix(world_draw_transform(current_shake_offset))
 	draw_particles()
 	draw_player()
-	draw_game_hud()
+	cash_burst.draw(self)
 	draw_reward_flights()
-	if screen_flash > 0.0:
+	draw_game_hud()
+	if screen_flash > 0.0 and not reduced_effects:
 		draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color(1, 0.92, 0.68, screen_flash * 0.42))
-	if damage_flash > 0.0:
+	if damage_flash > 0.0 and not reduced_effects:
 		draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color(1, 0.13, 0.18, damage_flash * 0.25))
 	if tutorial_visible:
 		draw_tutorial()

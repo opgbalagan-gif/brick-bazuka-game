@@ -340,9 +340,11 @@ func _test_moving_platforms(game) -> void:
 	game.start_game()
 	var initial_blocks: Array = game.blocks.duplicate(true)
 	assert(is_equal_approx(game.blocks[0]["pos"].x + game.blocks[0]["size"].x * 0.5, game.player_pos.x), "The first moving platform must start beneath the hero")
+	assert(not game.tutorial_visible, "A run must start directly; controls are taught in menu settings")
+	game.open_control_settings()
 	game._process(0.2)
-	assert(game.blocks == initial_blocks, "Platforms must wait while the introductory hint is open")
-	game.tutorial_visible = false
+	assert(game.blocks == initial_blocks, "Opening control settings must freeze moving platforms")
+	game.control_settings.close()
 	game.paused = true
 	game._process(0.2)
 	assert(game.blocks == initial_blocks, "Pause must freeze moving platforms")
