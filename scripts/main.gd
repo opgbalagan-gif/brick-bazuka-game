@@ -41,6 +41,7 @@ const MAX_HEALTH := 3
 const HERO_TEX := preload("res://assets/characters/main_hero.png")
 const HERO_BODY_TEX := preload("res://assets/characters/main_hero_body.png")
 const MENU_COVER_TEX := preload("res://assets/backgrounds/menu_cover.png")
+const MENU_ILLUSTRATION := preload("res://assets/backgrounds/menu-illustration.jpg")
 const NIGHT_CITY_VIDEO := preload("res://assets/backgrounds/night_city_loop.ogv")
 const NIGHT_CITY_POSTER := preload("res://assets/backgrounds/night_city_poster.png")
 const GHOST_FRAMES := preload("res://assets/characters/ghost/animations.tres")
@@ -178,7 +179,7 @@ var platform_layer: Node2D
 var background_layer: Control
 var background_video: VideoStreamPlayer
 
-var cta_rect := Rect2(94, 650, 352, 114)
+var cta_rect := Rect2(94, 790, 352, 114)
 var touch_control: Node
 var leaderboard_button: BaseButton
 var board_was_paused := false
@@ -1296,13 +1297,10 @@ func _draw() -> void:
 
 
 func draw_menu() -> void:
-	draw_texture_rect(NIGHT_CITY_POSTER, Rect2(Vector2.ZERO, VIEW_SIZE), false)
-	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color(0.015, 0.02, 0.025, 0.28))
-	draw_texture_rect(NEW_LOGO, Rect2(35, 101, 470, 272), false)
-	draw_texture_rect(HERO_TEX, fit_texture(HERO_TEX, Rect2(99, 369, 342, 262)), false)
+	draw_texture_rect(MENU_ILLUSTRATION, Rect2(Vector2.ZERO, VIEW_SIZE), false)
 	draw_texture_rect(START_BUTTON_TEX, cta_rect, false)
-	draw_label("МОНЕТЫ: " + str(rewards.coins), Vector2(120, 92), 21, GOLD, HORIZONTAL_ALIGNMENT_CENTER, 300, 2)
-	draw_label("СОБИРАЙ КЕЙСЫ • ОТКРЫВАЙ СКИНЫ", Vector2(20, 808), 19, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 500, 2)
+	draw_label("МОНЕТЫ: " + str(rewards.coins), Vector2(120, 774), 21, GOLD, HORIZONTAL_ALIGNMENT_CENTER, 300, 2)
+	draw_label("СОБИРАЙ КЕЙСЫ • ОТКРЫВАЙ СКИНЫ", Vector2(20, 936), 19, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 500, 2)
 
 
 func fit_texture(texture: Texture2D, bounds: Rect2) -> Rect2:
