@@ -107,10 +107,6 @@ func draw_icons() -> void:
 	icons.draw_rect(Rect2(-16, 62, 41, 28), Color("06090d"))
 	icons.draw_texture_rect(GLOVE, Rect2(-34, -6, 90, 99), false)
 	icons.draw_set_transform(Vector2.ZERO)
-	for side in [-1, 1]:
-		var tip := Vector2(147 + side * 78, 460)
-		icons.draw_line(tip, tip + Vector2(-side * 13, -9), UI.LIME, 3, true)
-		icons.draw_line(tip, tip + Vector2(-side * 13, 9), UI.LIME, 3, true)
 	# Both gloves, cuffs and phone rotate together, as if held by the hero.
 	icons.draw_set_transform(Vector2(393, 425 + cos(elapsed * 2.2) * 3), motion * 0.24)
 	for side in [-1, 1]:

@@ -1299,8 +1299,7 @@ func draw_menu() -> void:
 	draw_texture_rect(NIGHT_CITY_POSTER, Rect2(Vector2.ZERO, VIEW_SIZE), false)
 	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color(0.015, 0.02, 0.025, 0.28))
 	draw_texture_rect(NEW_LOGO, Rect2(35, 101, 470, 272), false)
-	var preview: Texture2D = preload("res://assets/release-september/prisoner-preview.tres") if rewards.equipped == REWARDS.ORANGE_SKIN else HERO_TEX
-	draw_texture_rect(preview, fit_texture(preview, Rect2(99, 369, 342, 262)), false)
+	draw_texture_rect(HERO_TEX, fit_texture(HERO_TEX, Rect2(99, 369, 342, 262)), false)
 	draw_texture_rect(START_BUTTON_TEX, cta_rect, false)
 	draw_label("МОНЕТЫ: " + str(rewards.coins), Vector2(120, 92), 21, GOLD, HORIZONTAL_ALIGNMENT_CENTER, 300, 2)
 	draw_label("СОБИРАЙ КЕЙСЫ • ОТКРЫВАЙ СКИНЫ", Vector2(20, 808), 19, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 500, 2)
