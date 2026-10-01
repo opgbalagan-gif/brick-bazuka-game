@@ -26,7 +26,7 @@ func run() -> void:
 	game.leaderboard.api_url = ""
 	game.set_process(false)
 	await process_frame
-	await click(game.settings_button)
+	game.open_control_settings()
 	assert(game.control_settings.visible and game.screen == game.Screen.MENU, "Settings entry must open without starting a run")
 	var settings = game.control_settings
 	await click(settings.sensitivity_buttons[2])

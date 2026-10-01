@@ -46,7 +46,6 @@ func _run() -> void:
 	var game = packed.instantiate()
 	game.profile_path = test_profile_path
 	root.add_child(game)
-	_use_tilt_stub(game)
 	game.leaderboard.api_url = ""
 	assert(game.background_video != null and game.background_video.loop, "Background video must be ready to loop")
 	assert(not game.background_video.is_playing(), "Title screen must not decode the game background")
@@ -55,8 +54,9 @@ func _run() -> void:
 	game.handle_menu_press(Vector2(270, 905))
 	assert(game.screen == 0, "The old bottom navigation must not start the game")
 	game.handle_menu_press(game.cta_rect.get_center())
-	assert(game.screen == 1, "The painted START button must launch the game")
+	assert(game.screen == 0 and game.pre_game_controls.visible, "START must open the pre-game control choice")
 	game.start_game()
+	_use_tilt_stub(game)
 	assert(game.best_meters == 123, "Existing height records must survive removal of currency")
 	assert(game.blocks.size() == 4, "The opening must contain four single platform rows")
 	for index in range(1, game.blocks.size()):

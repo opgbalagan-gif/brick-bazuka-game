@@ -193,7 +193,7 @@ var run_coins := 0
 var reward_flights: Array = []
 var cash_burst := CASH_BURST.new()
 var control_settings
-var settings_button: Button
+var pre_game_controls
 var settings_was_paused := false
 var pause_menu
 var pause_button: Button
@@ -256,13 +256,11 @@ func _ready() -> void:
 		reduced_effects = reduced
 		save_profile())
 	add_child(control_settings)
-	settings_button = ARCADE_UI.button("НАСТРОЙКИ И УПРАВЛЕНИЕ", true)
-	settings_button.position = Vector2(40, 836)
-	settings_button.size = Vector2(460, 66)
-	settings_button.add_theme_font_size_override("font_size", 24)
-	settings_button.z_index = 15
-	settings_button.pressed.connect(open_control_settings)
-	add_child(settings_button)
+	pre_game_controls = preload("res://scripts/pre_game_controls.gd").new()
+	pre_game_controls.tilt_control = tilt_control
+	pre_game_controls.play_requested.connect(start_game)
+	pre_game_controls.back_requested.connect(return_to_menu)
+	add_child(pre_game_controls)
 	pause_menu = PAUSE_MENU.new()
 	pause_menu.resume_requested.connect(resume_game)
 	pause_menu.settings_requested.connect(open_control_settings)
@@ -392,7 +390,7 @@ func _notification(what: int) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if screen == Screen.GAME_OVER or leaderboard.visible or skin_shop.visible or control_settings.visible:
+	if screen == Screen.GAME_OVER or leaderboard.visible or skin_shop.visible or control_settings.visible or pre_game_controls.visible:
 		return
 	if event is InputEventScreenTouch or event is InputEventScreenDrag:
 		if screen == Screen.GAME and not paused and not tilt_control.needs_permission():
@@ -412,7 +410,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				tutorial_visible = false
 		elif key == KEY_SPACE or key == KEY_ENTER:
 			if screen == Screen.MENU:
-				start_game()
+				open_pre_game_controls()
 			elif screen == Screen.GAME:
 				if paused:
 					resume_game()
@@ -483,7 +481,7 @@ func handle_press(position: Vector2) -> void:
 
 func handle_menu_press(position: Vector2) -> void:
 	if cta_rect.has_point(position):
-		start_game()
+		open_pre_game_controls()
 
 
 func handle_game_press(position: Vector2) -> void:
@@ -493,7 +491,14 @@ func handle_game_press(position: Vector2) -> void:
 	launch_player()
 
 
+func open_pre_game_controls() -> void:
+	touch_control.reset()
+	pre_game_controls.open()
+	queue_redraw()
+
+
 func start_game() -> void:
+	pre_game_controls.hide()
 	if is_instance_valid(pause_menu):
 		pause_menu.hide()
 	if is_instance_valid(control_settings):
@@ -557,6 +562,7 @@ func start_game() -> void:
 
 
 func return_to_menu() -> void:
+	pre_game_controls.hide()
 	pause_menu.hide()
 	control_settings.hide()
 	touch_control.reset()
@@ -1269,9 +1275,7 @@ func _exit_tree() -> void:
 
 func _draw() -> void:
 	sync_pause_controls()
-	var menu_buttons_visible: bool = screen == Screen.MENU and not leaderboard.visible and not skin_shop.visible and not control_settings.visible
-	if is_instance_valid(settings_button):
-		settings_button.visible = menu_buttons_visible
+	var menu_buttons_visible: bool = screen == Screen.MENU and not leaderboard.visible and not skin_shop.visible and not control_settings.visible and not pre_game_controls.visible
 	if is_instance_valid(leaderboard_button):
 		leaderboard_button.visible = menu_buttons_visible
 		leaderboard_button.position = Vector2(16, 18) if screen == Screen.MENU else Vector2(370, 161)
@@ -1300,7 +1304,6 @@ func draw_menu() -> void:
 	draw_texture_rect(START_BUTTON_TEX, cta_rect, false)
 	draw_label("МОНЕТЫ: " + str(rewards.coins), Vector2(120, 92), 21, GOLD, HORIZONTAL_ALIGNMENT_CENTER, 300, 2)
 	draw_label("СОБИРАЙ КЕЙСЫ • ОТКРЫВАЙ СКИНЫ", Vector2(20, 808), 19, WHITE, HORIZONTAL_ALIGNMENT_CENTER, 500, 2)
-	draw_label("КАК ИГРАТЬ? ОТКРОЙ И ПОПРОБУЙ", Vector2(40, 928), 17, PALE_CYAN, HORIZONTAL_ALIGNMENT_CENTER, 460, 1)
 
 
 func fit_texture(texture: Texture2D, bounds: Rect2) -> Rect2:
