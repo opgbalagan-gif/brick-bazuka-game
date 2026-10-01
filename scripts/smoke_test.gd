@@ -304,8 +304,10 @@ func _test_tilt_steering(game) -> void:
 	assert(game.player_pos == position_before, "Tilt must not move a paused game")
 	game.paused = false
 	game.tilt_control.blocking = true
+	game.hit_timer = 0.8
 	game._process(0.2)
 	assert(game.player_pos == position_before, "Game must wait while the sensor permission dialog is open")
+	assert(is_equal_approx(game.hit_timer, 0.8), "Sensor permission must not consume the player's protection timer")
 	game.tilt_control.blocking = false
 	assert(game.rockets.is_empty(), "Tilting must not fire the bazooka")
 	print("TILT_GAME_TEST_OK left_right braking pause permission no_shots")

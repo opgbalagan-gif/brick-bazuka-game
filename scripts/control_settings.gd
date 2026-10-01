@@ -9,7 +9,14 @@ const SENSITIVITIES := [0.7, 1.0, 1.4]
 var sensitivity := 1.0
 var reduced_effects := false
 var phone_button: Button
+var tilt_button: Button
 var desktop_button: Button
+var tilt_control
+var calibration_button: Button
+var sensor_status: Label
+var sensitivity_label: Label
+var practice_title: Label
+var last_status := ""
 var sensitivity_buttons: Array[Button] = []
 var effect_button: Button
 var instructions: Label
@@ -29,17 +36,26 @@ func _ready() -> void:
 	frame.outer = true
 	UI.panel(self, Rect2(32, 34, 476, 76), true)
 	text("НАСТРОЙКИ И УПРАВЛЕНИЕ", Rect2(42, 49, 456, 44), 28, UI.WHITE, true)
-	phone_button = action("ТЕЛЕФОН", Rect2(38, 126, 224, 52), func(): select_device(false))
-	desktop_button = action("КОМПЬЮТЕР", Rect2(278, 126, 224, 52), func(): select_device(true))
+	phone_button = action("ПАЛЬЦЕМ", Rect2(38, 126, 144, 52), func(): select_device(false))
+	tilt_button = action("НАКЛОНОМ", Rect2(198, 126, 144, 52), func(): select_device(false, true))
+	desktop_button = action("КЛАВИШИ", Rect2(358, 126, 144, 52), func(): select_device(true))
 	instructions = text("", Rect2(46, 196, 448, 144), 20)
 	instructions.add_theme_constant_override("line_spacing", 6)
+	sensor_status = text("", Rect2(40, 319, 460, 24), 16, UI.LIME, true)
 	text("ПРЫЖКИ И ПРИЦЕЛ — АВТОМАТИЧЕСКИ", Rect2(40, 351, 460, 25), 18, UI.LIME, true)
-	text("ПОПРОБУЙ ЗДЕСЬ", Rect2(40, 393, 460, 27), 23, UI.ORANGE, true)
+	practice_title = text("ПОПРОБУЙ ЗДЕСЬ", Rect2(40, 393, 460, 27), 23, UI.ORANGE, true)
+	calibration_button = action("ЦЕНТР", Rect2(334, 386, 166, 42), func():
+		if is_instance_valid(tilt_control):
+			tilt_control.calibrate()
+			practice.reset()
+			refresh())
+	calibration_button.custom_minimum_size.y = 42
 	practice = PRACTICE.new()
+	practice.tilt_control = tilt_control
 	practice.position = Vector2(40, 434)
 	practice.size = Vector2(460, 211)
 	add_child(practice)
-	text("ЧУВСТВИТЕЛЬНОСТЬ СВАЙПА", Rect2(40, 665, 460, 25), 20, UI.WHITE, true)
+	sensitivity_label = text("ЧУВСТВИТЕЛЬНОСТЬ СВАЙПА", Rect2(40, 665, 460, 25), 20, UI.WHITE, true)
 	var labels := ["ПЛАВНО", "ОБЫЧНО", "БЫСТРО"]
 	for index in 3:
 		var button := action(labels[index], Rect2(40 + 157 * index, 704, 146, 50), func():
@@ -53,8 +69,8 @@ func _ready() -> void:
 		changed.emit(sensitivity, reduced_effects))
 	text("Спокойные: без вспышек и тряски, меньше купюр.", Rect2(40, 829, 460, 20), 15, UI.LIME, true)
 	close_button = action("ГОТОВО", Rect2(110, 857, 320, 60), close)
-	select_device(false)
 	hide()
+	select_device(false, is_instance_valid(tilt_control) and tilt_control.mode == "tilt")
 
 func text(value: String, rect: Rect2, font_size: int, color: Color = UI.WHITE, centered: bool = false) -> Label:
 	var label := UI.label(value, font_size, color)
@@ -74,17 +90,46 @@ func action(value: String, rect: Rect2, callback: Callable) -> Button:
 	add_child(button)
 	return button
 
-func select_device(desktop: bool) -> void:
+func select_device(desktop: bool, sensor: bool = false) -> void:
 	practice.keyboard_enabled = desktop
+	if is_instance_valid(tilt_control):
+		tilt_control.set_mode("tilt" if sensor else "touch")
+		if sensor and visible:
+			tilt_control.start()
+		else:
+			tilt_control.stop()
+	practice.tilt_enabled = sensor
 	practice.reset()
-	phone_button.modulate = Color("8f969d") if desktop else Color.WHITE
-	desktop_button.modulate = Color.WHITE if desktop else Color("8f969d")
-	instructions.text = "СТРЕЛКИ / A D (Ф В) — двигайся.\nПРОБЕЛ или клик — стреляй.\nESC — пауза во время игры.\nВ поле ниже проверь движение и выстрел." if desktop else "Держи слева / справа — двигайся.\nИли веди палец в нужную сторону.\nОтпусти — остановись. Короткий тап — выстрел.\nВторым пальцем можно стрелять на ходу.\nДве полоски сверху — пауза и настройки."
 	refresh()
 
 func refresh() -> void:
 	if not is_instance_valid(practice):
 		return
+	var sensor: bool = is_instance_valid(tilt_control) and tilt_control.mode == "tilt" and not practice.keyboard_enabled
+	if practice.tilt_enabled != sensor:
+		practice.tilt_enabled = sensor
+		practice.reset()
+	phone_button.modulate = Color.WHITE if not practice.keyboard_enabled and not sensor else Color("858d91")
+	tilt_button.modulate = Color.WHITE if sensor else Color("858d91")
+	desktop_button.modulate = Color.WHITE if practice.keyboard_enabled else Color("858d91")
+	instructions.text = "СТРЕЛКИ / A D (Ф В) — двигайся.\nПРОБЕЛ или клик — стреляй.\nESC — пауза во время игры.\nВ поле ниже проверь движение и выстрел." if practice.keyboard_enabled else "Держи слева / справа — двигайся.\nИли веди палец в нужную сторону.\nОтпусти — остановись. Короткий тап — выстрел.\nВторым пальцем можно стрелять на ходу.\nДве полоски сверху — пауза и настройки."
+	if sensor:
+		instructions.text = "Наклоняй телефон влево или вправо.\nБольше наклон — быстрее движение.\nКороткий тап — выстрел.\nДержи удобно и нажми «ЦЕНТР»."
+	last_status = tilt_control.get_status() if sensor else ""
+	var messages := {
+		"active": "НАКЛОН ВКЛЮЧЁН — МОЖНО ПРОБОВАТЬ",
+		"waiting": "Держи телефон удобно — ждём датчик…",
+		"permission": "Разреши наклон в открывшемся окне.",
+		"requesting": "Ожидаем разрешение на наклон…",
+		"denied": "Нет доступа к датчику. Выбери «ПАЛЬЦЕМ».",
+		"unavailable": "Датчик недоступен. Выбери «ПАЛЬЦЕМ».",
+		"insecure": "Для наклона открой игру по HTTPS."
+	}
+	sensor_status.text = messages.get(last_status, "")
+	calibration_button.visible = sensor
+	calibration_button.disabled = last_status not in ["active", "waiting"]
+	practice_title.size.x = 280 if sensor else 460
+	sensitivity_label.text = "ЧУВСТВИТЕЛЬНОСТЬ НАКЛОНА" if sensor else "ЧУВСТВИТЕЛЬНОСТЬ СВАЙПА"
 	practice.touch.sensitivity = sensitivity
 	for index in sensitivity_buttons.size():
 		var selected := is_equal_approx(sensitivity, SENSITIVITIES[index])
@@ -99,7 +144,7 @@ func open(current_sensitivity: float, current_reduced_effects: bool) -> void:
 	reduced_effects = current_reduced_effects
 	refresh()
 	show()
-	practice.reset()
+	select_device(false, is_instance_valid(tilt_control) and tilt_control.mode == "tilt")
 
 func close() -> void:
 	hide()
@@ -110,3 +155,9 @@ func _input(event: InputEvent) -> void:
 	if visible and event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
 		close()
 		get_viewport().set_input_as_handled()
+
+func _process(_delta: float) -> void:
+	if visible and is_instance_valid(tilt_control):
+		var current: String = tilt_control.get_status() if practice.tilt_enabled else ""
+		if current != last_status or practice.tilt_enabled != (tilt_control.mode == "tilt" and not practice.keyboard_enabled):
+			refresh()

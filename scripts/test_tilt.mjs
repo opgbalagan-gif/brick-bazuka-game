@@ -41,7 +41,7 @@ function browser({mobile = true, secure = true, supported = true, permission} = 
   return {
     input: window.BrickTilt, window, document, screen, elements,
     enable: () => card.children[1].fire('click'), skip: () => card.children[2].fire('click'),
-    toggle: () => elements.get('brick-control-mode').fire('click'),
+    toggle: () => window.BrickTilt.set_mode(window.BrickTilt.get_mode() === 'tilt' ? 'touch' : 'tilt'),
     sample: (gamma, beta = 30) => window.fire('deviceorientation', {gamma, beta}),
     timeout: () => {for (const fn of [...timers.values()]) fn();},
     permissionCalls: () => permissionCalls
@@ -54,7 +54,7 @@ android.input.start();
 assert.equal(android.input.needs_permission(), false);
 assert.equal(android.input.get_status(), 'buttons', 'Phones must start in touch mode without a sensor prompt');
 for (const id of ['brick-tilt-left', 'brick-tilt-right', 'brick-control-mode']) {
-  assert.equal(android.elements.get(id).style.display, 'none', 'Gameplay must not show control buttons');
+  assert.equal(android.elements.has(id), false, 'Tilt choices must live in settings, without extra gameplay buttons');
 }
 android.sample(0); android.sample(22);
 assert.equal(android.input.read_axis(), 0, 'Touch mode must ignore sensor movement');
@@ -86,7 +86,16 @@ assert.equal(android.input.read_axis(), 0);
 assert.equal(android.window.listeners.get('deviceorientation').size, 0, 'Menu stops the sensor listener');
 android.input.start();
 android.sample(-25, 40);
-assert.equal(android.input.read_axis(), 0, 'Each run starts with a fresh neutral position');
+assert(android.input.read_axis() > .85, 'The calibrated center must survive closing settings and resuming');
+android.input.calibrate();
+android.sample(-25, 40);
+assert.equal(android.input.read_axis(), 0, 'Center must use the current comfortable phone position');
+android.input.set_sensitivity(.7);
+android.sample(-25, 52);
+const gentle = android.input.read_axis();
+android.input.set_sensitivity(1.4);
+android.sample(-25, 52);
+assert(android.input.read_axis() > gentle * 1.9, 'Sensitivity must affect real sensor input');
 
 const iphone = browser({permission: () => Promise.resolve('granted')});
 iphone.input.start();
@@ -97,8 +106,9 @@ assert.equal(iphone.permissionCalls(), 0, 'Do not request iPhone access outside 
 iphone.enable();
 assert.equal(iphone.permissionCalls(), 1, 'Permission is requested synchronously in the click handler');
 await flush();
-assert.equal(iphone.input.needs_permission(), false);
+assert.equal(iphone.input.needs_permission(), true, 'Wait for a real sensor sample before releasing the game');
 iphone.sample(0); iphone.sample(22);
+assert.equal(iphone.input.needs_permission(), false);
 assert.equal(iphone.input.read_axis(), 1);
 iphone.input.stop(); iphone.input.start();
 assert.equal(iphone.permissionCalls(), 1, 'Granted access is reused between runs');
@@ -108,11 +118,9 @@ denied.input.start(); denied.toggle(); denied.enable(); await flush();
 assert.equal(denied.input.get_status(), 'denied');
 denied.skip();
 assert.equal(denied.input.needs_permission(), false);
-const left = denied.elements.get('brick-tilt-left');
-assert.equal(left.style.display, 'none', 'Fallback input must keep the playfield clear');
-left.fire('pointerdown'); assert.equal(denied.input.read_axis(), -1);
-left.fire('pointercancel'); assert.equal(denied.input.read_axis(), 0, 'Cancelled touches release steering');
-denied.input.stop(); assert.equal(left.style.display, 'none');
+assert.equal(denied.input.get_mode(), 'touch', 'Fallback must report its selected mode to the saved Godot setting');
+assert.equal(denied.input.read_axis(), 0, 'Fallback must release sensor input');
+denied.input.stop();
 
 let resolvePermission;
 const pending = browser({permission: () => new Promise(resolve => {resolvePermission = resolve;})});
@@ -125,8 +133,7 @@ for (const options of [{secure: false}, {supported: false}]) {
   unavailable.input.start(); assert.equal(unavailable.input.needs_permission(), false);
   unavailable.toggle(); assert(unavailable.input.needs_permission());
   unavailable.skip(); assert.equal(unavailable.input.needs_permission(), false);
-  unavailable.elements.get('brick-tilt-right').fire('pointerdown');
-  assert.equal(unavailable.input.read_axis(), 1, 'Buttons work when sensor access is unavailable');
+  assert.equal(unavailable.input.get_mode(), 'touch', 'Unsupported sensors must offer finger controls');
 }
 const silent = browser();
 silent.input.start(); silent.toggle(); silent.timeout();
@@ -136,8 +143,11 @@ assert.equal(desktop.input.is_mobile(), false, 'Desktop builds must select the k
 assert.equal(android.input.is_mobile(), true, 'Phones must retain the touch tutorial');
 desktop.input.start(); desktop.timeout();
 assert.equal(desktop.input.needs_permission(), false, 'Desktop keyboard play must never be blocked by sensor prompts');
-assert.equal(desktop.elements.get('brick-tilt-left').style.display, 'none');
-assert.equal(desktop.elements.get('brick-control-mode').style.display, 'none');
+assert.equal(desktop.elements.has('brick-tilt-left'), false);
+assert.equal(desktop.elements.has('brick-control-mode'), false);
+desktop.input.set_mode('tilt'); desktop.timeout();
+assert.equal(desktop.input.needs_permission(), true, 'Explicit tilt on a device without samples must offer a way back');
+desktop.skip(); assert.equal(desktop.input.needs_permission(), false);
 iphone.sample(0); iphone.sample(22);
 iphone.toggle();
 assert.equal(iphone.input.get_status(), 'buttons');
@@ -145,4 +155,12 @@ assert.equal(iphone.input.read_axis(), 0, 'Switching back to touch must clear ti
 assert.equal(iphone.window.listeners.get('deviceorientation').size, 0, 'Touch mode must stop sensors');
 iphone.input.stop(); iphone.input.start();
 assert.equal(iphone.input.get_status(), 'buttons', 'The selected touch mode must survive a restart');
-console.log('TILT_WEB_TEST_OK touch_default mode_switch calibration dead_zone left_right rotation permission fallback visibility lifecycle');
+const restored = browser({permission: () => Promise.resolve('granted')});
+restored.input.set_mode('tilt');
+assert.equal(restored.permissionCalls(), 0, 'Restoring the preference must not automatically request permission');
+assert.equal(restored.input.needs_permission(), false, 'A restored mode must stay inactive in the menu');
+restored.input.start();
+assert.equal(restored.input.needs_permission(), true);
+restored.input.stop();
+assert.equal(restored.input.needs_permission(), false, 'Leaving settings must close the permission UI');
+console.log('TILT_WEB_TEST_OK settings_mode saved_preference calibration_survives_pause sensitivity touch_default dead_zone left_right rotation trusted_permission fallback visibility lifecycle');

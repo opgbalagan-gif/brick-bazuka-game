@@ -6,6 +6,8 @@ const HERO := preload("res://assets/characters/main_hero.png")
 const ROCKET := preload("res://assets/weapons/rocket.svg")
 var touch := TOUCH.new()
 var keyboard_enabled := false
+var tilt_enabled := false
+var tilt_control
 var hero_x := 220.0
 var direction := 1.0
 var elapsed := 0.0
@@ -28,6 +30,8 @@ func reset() -> void:
 	shots.clear()
 	shot_count = 0
 	feedback = "СТРЕЛКИ / A D + ПРОБЕЛ" if keyboard_enabled else "ПОПРОБУЙ ДЕРЖАТЬ ПАЛЕЦ СЛЕВА ИЛИ СПРАВА"
+	if tilt_enabled:
+		feedback = "НАКЛОНЯЙ ТЕЛЕФОН ВЛЕВО И ВПРАВО"
 	queue_redraw()
 
 func shoot() -> void:
@@ -100,6 +104,8 @@ func _process(delta: float) -> void:
 	elapsed += delta
 	touch.advance(delta)
 	var axis: float = touch.axis
+	if tilt_enabled and is_instance_valid(tilt_control):
+		axis = tilt_control.read_sensor_axis()
 	if keyboard_enabled:
 		var right := Input.is_physical_key_pressed(KEY_RIGHT) or Input.is_physical_key_pressed(KEY_D)
 		var left := Input.is_physical_key_pressed(KEY_LEFT) or Input.is_physical_key_pressed(KEY_A)
@@ -116,7 +122,7 @@ func _process(delta: float) -> void:
 
 func _draw() -> void:
 	UI.METAL.draw_at(self, Rect2(Vector2.ZERO, size))
-	if not keyboard_enabled:
+	if not keyboard_enabled and not tilt_enabled:
 		draw_rect(Rect2(14, 14, size.x * 0.5 - 14, size.y - 47), Color(0.72, 0.95, 0.05, 0.045))
 		draw_line(Vector2(size.x * 0.5, 18), Vector2(size.x * 0.5, size.y - 42), Color(1, 1, 1, 0.14), 2)
 	var arrow := PackedVector2Array([Vector2(0, 12), Vector2(12, 0), Vector2(12, 8), Vector2(30, 8), Vector2(30, 16), Vector2(12, 16), Vector2(12, 24)])

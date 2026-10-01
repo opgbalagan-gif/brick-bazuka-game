@@ -1,25 +1,27 @@
-/* Optional phone tilt and touch buttons. Canvas gestures are handled in Godot. */
+/* Motion input selected in Godot settings; iOS permission stays on a trusted DOM button. */
 (() => {
   'use strict';
   const DEAD_ZONE = 3;
   const FULL_TILT = 22;
   const mobile = navigator.maxTouchPoints > 0;
   let active = false, listening = false, granted = false, buttonsOnly = true;
-  let status = 'idle', axis = 0, buttonAxis = 0, neutral = null;
+  let status = 'idle', axis = 0, neutral = null, sensitivity = 1;
   let sampleTimer = null, panelOpen = false;
   let permissionAttempt = 0;
 
   const style = document.createElement('style');
   style.textContent = `
     #canvas {touch-action:none}
-    #brick-tilt-panel {position:fixed;inset:0;z-index:30;display:none;align-items:center;justify-content:center;background:#000b;font-family:Arial,sans-serif;color:#f5f8ee;padding:24px;box-sizing:border-box}
-    #brick-tilt-card {width:320px;max-width:100%;padding:24px;border:2px solid #80df41;border-radius:14px;background:#071f38;text-align:center;box-sizing:border-box}
-    #brick-tilt-message {font-size:19px;line-height:1.4;margin:0 0 18px}
-    #brick-tilt-panel button {width:100%;min-height:48px;border-radius:9px;border:1px solid #80df41;background:#287f29;color:inherit;font-size:16px;margin:5px 0;touch-action:manipulation}
-    #brick-tilt-panel button.secondary {background:#12334b;border-color:#355c70}
-    .brick-tilt-arrow {position:fixed;bottom:18px;z-index:25;width:58px;height:58px;border:2px solid #80df41;border-radius:12px;background:#071f38dd;color:#f5f8ee;font:30px Arial;touch-action:none;user-select:none;-webkit-user-select:none;display:none}
-    #brick-tilt-left {left:12px} #brick-tilt-right {right:12px}
-    #brick-control-mode {position:fixed;right:12px;bottom:86px;z-index:25;min-height:38px;padding:0 12px;border:1px solid #80df41;border-radius:9px;background:#071f38dd;color:#f5f8ee;font:13px Arial;touch-action:manipulation;display:none}
+    @font-face{font-family:BrickPixel;src:url('ui/Tiny5-Regular.ttf')}
+    #brick-tilt-panel {position:fixed;inset:0;z-index:30;display:none;align-items:center;justify-content:center;background:#000c;font-family:BrickPixel,monospace;color:#fff7e9;padding:24px;box-sizing:border-box}
+    #brick-tilt-card {width:370px;max-width:100%;padding:28px 20px;border:6px solid #ff7108;border-radius:16px;background:repeating-linear-gradient(45deg,#ffffff04 0 2px,transparent 2px 5px),#101518;text-align:center;box-sizing:border-box;box-shadow:0 0 0 4px #050607,inset 0 0 0 2px #050607}
+    #brick-tilt-message {font-size:24px;line-height:1.25;margin:0 0 20px;text-shadow:2px 2px #000}
+    #brick-tilt-panel button {position:relative;width:100%;min-height:54px;border-radius:9px;border:3px solid #050607;box-shadow:0 0 0 2px #ff8710;background:linear-gradient(#ff950b,#f25806);color:inherit;font:24px BrickPixel,monospace;text-shadow:2px 2px #000;margin:8px 0;padding:9px 14px;touch-action:manipulation;cursor:pointer}
+    #brick-tilt-panel button::before,#brick-tilt-panel button::after {content:'';position:absolute;top:6px;width:9px;height:9px;border:2px solid #080b0d;border-radius:50%;background:linear-gradient(#f5f8fc,#687482);box-shadow:0 22px #74828d}
+    #brick-tilt-panel button::before{left:5px}#brick-tilt-panel button::after{right:5px}
+    #brick-tilt-panel button.secondary {background:#13191b;color:#b7f30c}
+    #brick-tilt-panel button:focus-visible {outline:3px solid #b7f30c;outline-offset:4px}
+    #brick-tilt-panel button:disabled {opacity:.6;cursor:wait}
   `;
   document.head.appendChild(style);
   const panel = document.createElement('div');
@@ -32,42 +34,17 @@
   message.id = 'brick-tilt-message';
   const enable = document.createElement('button');
   enable.textContent = 'ВКЛЮЧИТЬ НАКЛОН';
+  enable.id = 'brick-tilt-enable';
   const skip = document.createElement('button');
   skip.textContent = 'ИГРАТЬ ПАЛЬЦЕМ';
   skip.className = 'secondary';
+  skip.id = 'brick-tilt-skip';
   card.append(message, enable, skip);
   panel.appendChild(card);
   document.body.appendChild(panel);
-  const mode = document.createElement('button');
-  mode.id = 'brick-control-mode';
-  document.body.appendChild(mode);
-
-  const arrows = [-1, 1].map(direction => {
-    const button = document.createElement('button');
-    button.id = direction < 0 ? 'brick-tilt-left' : 'brick-tilt-right';
-    button.className = 'brick-tilt-arrow';
-    button.textContent = direction < 0 ? '←' : '→';
-    button.setAttribute('aria-label', direction < 0 ? 'Двигаться влево' : 'Двигаться вправо');
-    button.addEventListener('pointerdown', event => {
-      event.preventDefault();
-      event.stopPropagation();
-      button.setPointerCapture(event.pointerId);
-      buttonAxis = direction;
-    });
-    const release = event => {
-      event.preventDefault();
-      event.stopPropagation();
-      if (buttonAxis === direction) buttonAxis = 0;
-    };
-    button.addEventListener('pointerup', release);
-    button.addEventListener('pointercancel', release);
-    button.addEventListener('lostpointercapture', release);
-    document.body.appendChild(button);
-    return button;
-  });
 
   function render() {
-    panel.style.display = active && panelOpen && mobile ? 'flex' : 'none';
+    panel.style.display = active && panelOpen ? 'flex' : 'none';
     const messages = {
       permission: 'Разреши наклон телефона для движения влево и вправо.',
       requesting: 'Ожидаем разрешение…',
@@ -78,11 +55,6 @@
     message.textContent = messages[status] || messages.permission;
     enable.disabled = status === 'requesting';
     enable.style.display = ['unavailable', 'insecure'].includes(status) ? 'none' : 'block';
-    // The playfield only shows score and lives. Godot handles finger gestures.
-    arrows.forEach(button => { button.style.display = 'none'; });
-    mode.style.display = 'none';
-    mode.textContent = buttonsOnly ? 'НАКЛОН' : 'ПАЛЕЦ';
-    mode.setAttribute('aria-label', buttonsOnly ? 'Переключить на управление наклоном' : 'Переключить на управление пальцем');
   }
 
   function orientation(event) {
@@ -92,7 +64,7 @@
     const roll = event.gamma * Math.cos(radians) + event.beta * Math.sin(radians);
     if (neutral === null) neutral = roll;
     const relative = roll - neutral;
-    axis = Math.sign(relative) * Math.min(1, Math.max(0, Math.abs(relative) - DEAD_ZONE) / (FULL_TILT - DEAD_ZONE));
+    axis = Math.sign(relative) * Math.min(1, Math.max(0, Math.abs(relative) - DEAD_ZONE) * sensitivity / (FULL_TILT - DEAD_ZONE));
     status = 'active';
     panelOpen = false;
     clearTimeout(sampleTimer);
@@ -101,7 +73,6 @@
 
   function recenter() {
     axis = 0;
-    buttonAxis = 0;
     neutral = null;
   }
 
@@ -117,12 +88,12 @@
     listening = true;
     status = 'waiting';
     panelOpen = false;
-    recenter();
+    axis = 0;
     clearTimeout(sampleTimer);
     sampleTimer = setTimeout(() => {
       if (!active || status !== 'waiting') return;
       status = 'unavailable';
-      panelOpen = mobile;
+      panelOpen = true;
       render();
     }, 2500);
     render();
@@ -131,7 +102,7 @@
   function start() {
     permissionAttempt++;
     active = true;
-    recenter();
+    axis = 0;
     if (buttonsOnly) {
       status = 'buttons';
       panelOpen = false;
@@ -143,16 +114,16 @@
 
   function startTilt() {
     buttonsOnly = false;
-    recenter();
+    axis = 0;
     if (!window.isSecureContext) {
       status = 'insecure';
-      panelOpen = mobile;
+      panelOpen = true;
     } else if (typeof window.DeviceOrientationEvent === 'undefined') {
       status = 'unavailable';
-      panelOpen = mobile;
+      panelOpen = true;
     } else if (typeof window.DeviceOrientationEvent.requestPermission === 'function' && !granted) {
       status = 'permission';
-      panelOpen = mobile;
+      panelOpen = true;
     } else {
       listen();
     }
@@ -195,11 +166,6 @@
     render();
   }
   skip.addEventListener('click', useTouch);
-  mode.addEventListener('click', () => {
-    if (!active) return;
-    if (buttonsOnly) startTilt();
-    else useTouch();
-  });
   document.addEventListener('visibilitychange', recenter);
   window.addEventListener('blur', recenter);
   window.addEventListener('orientationchange', recenter);
@@ -207,16 +173,34 @@
 
   window.BrickTilt = {
     start,
+    set_mode(value) {
+      const nextTouch = value !== 'tilt';
+      if (nextTouch === buttonsOnly) return;
+      permissionAttempt++;
+      stopListening();
+      recenter();
+      if (nextTouch) { useTouch(); return; }
+      buttonsOnly = false;
+      if (active) startTilt();
+    },
+    get_mode() { return buttonsOnly ? 'touch' : 'tilt'; },
+    set_sensitivity(value) {
+      sensitivity = Number.isFinite(value) ? Math.min(1.4, Math.max(.7, value)) : 1;
+    },
+    calibrate() {
+      recenter();
+      if (active && !buttonsOnly && ['active', 'waiting'].includes(status)) listen();
+    },
     stop() {
       permissionAttempt++;
       active = false;
       panelOpen = false;
       stopListening();
-      recenter();
+      axis = 0;
       render();
     },
-    read_axis() { return active && !document.hidden && !panelOpen ? buttonAxis || axis : 0; },
-    needs_permission() { return active && mobile && panelOpen; },
+    read_axis() { return active && !document.hidden && !panelOpen && !buttonsOnly ? axis : 0; },
+    needs_permission() { return active && (panelOpen || (!buttonsOnly && status === 'waiting')); },
     is_mobile() { return mobile; },
     get_status() { return status; }
   };

@@ -123,6 +123,7 @@ var tutorial_time := 0.0
 var sound_enabled := true
 var haptics_enabled := true
 var touch_sensitivity := 1.0
+var control_mode := "touch"
 var reduced_effects := false
 var menu_time := 0.0
 var toast_text := ""
@@ -209,7 +210,13 @@ func _ready() -> void:
 		mask_uvs.append(point / HERO_BODY_TEX.get_size())
 		mask_polygon.append((point - Vector2(638, 266)) * Vector2(0.14, 0.14))
 	tilt_control = TILT_CONTROL.new()
+	tilt_control.mode = control_mode
+	tilt_control.sensitivity = touch_sensitivity
 	add_child(tilt_control)
+	tilt_control.mode_changed.connect(func(value: String):
+		control_mode = value
+		touch_control.reset()
+		save_profile())
 	touch_control = TOUCH_CONTROL.new()
 	touch_control.sensitivity = touch_sensitivity
 	touch_control.shot_requested.connect(launch_player)
@@ -240,10 +247,12 @@ func _ready() -> void:
 	shop_button.pressed.connect(open_skin_shop)
 	add_child(shop_button)
 	control_settings = CONTROL_SETTINGS.new()
+	control_settings.tilt_control = tilt_control
 	control_settings.closed.connect(close_control_settings)
 	control_settings.changed.connect(func(value: float, reduced: bool):
 		touch_sensitivity = value
 		touch_control.sensitivity = value
+		tilt_control.set_sensitivity(value)
 		reduced_effects = reduced
 		save_profile())
 	add_child(control_settings)
@@ -352,13 +361,14 @@ func sync_video_background() -> void:
 
 func _process(delta: float) -> void:
 	sync_video_background()
+	var waiting_for_tilt: bool = tilt_control.needs_permission()
 	if screen == Screen.GAME and tutorial_visible and not paused and not tilt_control.needs_permission() and absf(tilt_control.read_axis()) > 0.05:
 		tutorial_visible = false
-	if not paused:
+	if not paused and not waiting_for_tilt:
 		menu_time += delta
-	if tutorial_visible and not paused:
+	if tutorial_visible and not paused and not waiting_for_tilt:
 		tutorial_time += delta
-	if not paused:
+	if not paused and not waiting_for_tilt:
 		toast_timer = maxf(0.0, toast_timer - delta)
 		shoot_timer = maxf(0.0, shoot_timer - delta)
 		reload_timer = maxf(0.0, reload_timer - delta)
@@ -653,7 +663,7 @@ func update_game(delta: float) -> void:
 			contact_cooldown = maxf(contact_cooldown, 0.6)
 	else:
 		player_vel.y += PLAYER_GRAVITY * delta
-	var steering: float = touch_control.axis if touch_control.is_steering() else tilt_control.read_axis()
+	var steering: float = touch_control.axis if control_mode == "touch" and touch_control.is_steering() else tilt_control.read_axis()
 	player_vel.x = move_toward(player_vel.x, steering * STEERING_SPEED, STEERING_ACCELERATION * delta)
 	player_pos += player_vel * delta
 	player_pos.x = wrapf(player_pos.x, 0.0, WORLD_SIZE.x)
@@ -1042,6 +1052,7 @@ func open_control_settings() -> void:
 func close_control_settings() -> void:
 	paused = settings_was_paused
 	touch_control.reset()
+	tilt_control.stop()
 	if screen == Screen.GAME and not paused:
 		tilt_control.start()
 	sync_pause_controls()
@@ -1234,6 +1245,7 @@ func load_profile() -> void:
 	sound_enabled = bool(config.get_value("settings", "sound", true))
 	haptics_enabled = bool(config.get_value("settings", "haptics", true))
 	touch_sensitivity = clampf(float(config.get_value("settings", "touch_sensitivity", 1.0)), 0.7, 1.4)
+	control_mode = "tilt" if config.get_value("settings", "control_mode", "touch") == "tilt" else "touch"
 	reduced_effects = bool(config.get_value("settings", "reduced_effects", false))
 
 
@@ -1246,6 +1258,7 @@ func save_profile() -> void:
 	config.set_value("settings", "sound", sound_enabled)
 	config.set_value("settings", "haptics", haptics_enabled)
 	config.set_value("settings", "touch_sensitivity", touch_sensitivity)
+	config.set_value("settings", "control_mode", control_mode)
 	config.set_value("settings", "reduced_effects", reduced_effects)
 	config.save(profile_path)
 
